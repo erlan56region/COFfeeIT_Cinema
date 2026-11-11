@@ -10,7 +10,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
 const ROOT = path.join(__dirname, '..');
-const PUBLIC_DIR = path.join(ROOT, 'public');
+const PUBLIC_DIR = ROOT; // статические файлы сайта раздаются из корня ветки (GitHub Pages)
 const DATA_DIR = path.join(ROOT, '.data');
 const DATA_FILE = path.join(DATA_DIR, 'rooms.json');
 

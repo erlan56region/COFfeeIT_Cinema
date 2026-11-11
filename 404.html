@@ -1,15 +1,24 @@
 <!doctype html>
 <html lang="ru">
 <head>
+  <script>
+    (function(){
+      var head=document.getElementsByTagName('head')[0],base=document.createElement('base');
+      var seg=location.pathname.split('/').filter(Boolean);
+      base.href=(seg.length>=2 ? '/'+seg.slice(0,2).join('/')+'/' : '/');
+      head.insertBefore(base,head.firstChild);
+    })();
+  </script>
+
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Страница не найдена — COFfeeIT Cinema</title>
   <meta name="theme-color" content="#0b0807">
-  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="preload" href="/vendor/manrope-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="/vendor/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/base.css">
-  <link rel="stylesheet" href="/css/landing.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="vendor/manrope-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="vendor/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/landing.css">
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -24,7 +33,7 @@
 
   <header class="site-header">
     <div class="container">
-      <a class="brand" href="/"><span class="brand-mark"><svg><use href="#i-logo"/></svg></span><span class="brand-text">COFfeeIT<small>cinema</small></span></a>
+      <a class="brand" href=""><span class="brand-mark"><svg><use href="#i-logo"/></svg></span><span class="brand-text">COFfeeIT<small>cinema</small></span></a>
     </div>
   </header>
 
@@ -36,8 +45,8 @@
       <h1 style="font-size:clamp(24px,4vw,34px);letter-spacing:-0.03em;margin-bottom:10px">Страница не найдена</h1>
       <p style="color:var(--muted);font-size:16px;line-height:1.55;margin-bottom:24px">Такой комнаты нет или ссылка устарела. Комнаты живут сутки после последнего просмотра.</p>
       <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-        <a class="btn btn-primary" href="/">Создать комнату</a>
-        <a class="btn btn-ghost" href="/#join">Войти по коду</a>
+        <a class="btn btn-primary" href="">Создать комнату</a>
+        <a class="btn btn-ghost" href="#join">Войти по коду</a>
       </div>
     </div>
   </main>

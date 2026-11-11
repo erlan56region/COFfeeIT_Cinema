@@ -1,6 +1,15 @@
 <!doctype html>
 <html lang="ru">
 <head>
+  <script>
+    (function(){
+      var head=document.getElementsByTagName('head')[0],base=document.createElement('base');
+      var seg=location.pathname.split('/').filter(Boolean);
+      base.href=(seg.length>=2 ? '/'+seg.slice(0,2).join('/')+'/' : '/');
+      head.insertBefore(base,head.firstChild);
+    })();
+  </script>
+
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>COFfeeIT Cinema — смотрите видео вместе, на любом расстоянии</title>
@@ -10,11 +19,11 @@
   <meta property="og:title" content="COFfeeIT Cinema — совместный просмотр по ссылке">
   <meta property="og:description" content="Одна ссылка — и вы смотрите кино вместе, даже на разных концах планеты. Синхронный плеер, чат и реакции.">
   <meta property="og:image" content="/assets/hero.jpg">
-  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="preload" href="/vendor/manrope-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="/vendor/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/base.css">
-  <link rel="stylesheet" href="/css/landing.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="vendor/manrope-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="vendor/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/landing.css">
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -42,7 +51,7 @@
 
   <header class="site-header" id="header">
     <div class="container header-inner">
-      <a class="brand" href="/" aria-label="COFfeeIT Cinema — на главную">
+      <a class="brand" href="" aria-label="COFfeeIT Cinema — на главную">
         <span class="brand-mark"><svg><use href="#i-logo"/></svg></span>
         <span class="brand-text">COFfeeIT Cinema<small>смотреть вместе</small></span>
       </a>
@@ -124,7 +133,7 @@
 
         <div class="hero-visual">
           <div class="hero-frame">
-            <img src="/assets/hero.jpg" alt="Друзья смотрят фильм вместе в тёмной уютной комнате" width="1024" height="1024" fetchpriority="high">
+            <img src="assets/hero.jpg" alt="Друзья смотрят фильм вместе в тёмной уютной комнате" width="1024" height="1024" fetchpriority="high">
             <div class="hero-frame-top">
               <span class="live-pill"><i></i> вместе сейчас</span>
               <span class="chip" style="background:rgba(10,7,6,.66)">4 из 6 онлайн</span>
@@ -288,7 +297,7 @@
 
           <div class="mock">
             <div class="mock-player">
-              <img src="/assets/empty.jpg" alt="Кадр из фильма в плеере комнаты" loading="lazy">
+              <img src="assets/empty.jpg" alt="Кадр из фильма в плеере комнаты" loading="lazy">
               <div class="mock-topline">
                 <span class="live-pill"><i></i> 4 смотрят</span>
                 <span class="chip" style="background:rgba(10,7,6,.6)">в синхроне</span>
@@ -388,7 +397,7 @@
     <!-- --------------------------------- CTA -------------------------------- -->
     <section class="container">
       <div class="cta">
-        <img src="/assets/empty.jpg" alt="" loading="lazy">
+        <img src="assets/empty.jpg" alt="" loading="lazy">
         <div class="cta-inner">
           <h2>Соберите свою кинорум</h2>
           <p>Ссылка, друзья и два часа хорошего фильма. Всё остальное уже готово.</p>
@@ -421,6 +430,6 @@
 
   <div class="toast-layer" id="toast-layer" aria-live="polite"></div>
 
-  <script src="/js/landing.js" type="module"></script>
+  <script src="js/landing.js" type="module"></script>
 </body>
 </html>
