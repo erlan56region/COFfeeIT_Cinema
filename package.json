@@ -1,0 +1,22 @@
+{
+  "name": "coffeeit-cinema",
+  "version": "1.0.0",
+  "private": true,
+  "description": "COFfeeIT Cinema — совместный просмотр видео по ссылке: синхронизация плеера, чат и реакции",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/manrope": "^5.2.8",
+    "@vimeo/player": "^2.29.0",
+    "express": "^5.1.0",
+    "hls.js": "^1.6.15",
+    "socket.io": "^4.8.1"
+  }
+}

@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Кинозал — COFfeeIT Cinema</title>
+  <meta name="description" content="Совместный просмотр в COFfeeIT Cinema: синхронный плеер, чат и реакции.">
+  <meta name="theme-color" content="#0b0807">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/vendor/manrope-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/vendor/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/room.css">
+</head>
+<body class="room-body">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-logo" viewBox="0 0 24 24">
+      <path d="M8.6 2.9c-.95 1.2-.25 2.05.4 2.85M12.4 2.6c-.95 1.2-.25 2.05.4 2.85" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      <circle cx="12" cy="13.6" r="6.1" fill="none" stroke="currentColor" stroke-width="1.9"/>
+      <path d="M10.5 10.9v5.4l4.6-2.7-4.6-2.7Z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M15 6.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h.5"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19c0-3 2.5-4.8 5.5-4.8s5.5 1.8 5.5 4.8"/><path d="M16 5.8a3 3 0 0 1 0 5.6M17.5 14.6c2 .5 3.2 2.1 3.2 4.4"/></symbol>
+    <symbol id="i-sync" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-13.7 5.6M4 12a8 8 0 0 1 13.7-5.6"/><path d="M17.5 3.2v3.5h-3.5M6.5 20.8v-3.5h3.5"/></symbol>
+    <symbol id="i-crown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 7 4 3 5-6 5 6 4-3-2 11H5L3 7Z"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10.5 13.5a4 4 0 0 0 5.7 0l3-3a4 4 0 1 0-5.7-5.7l-1.2 1.2"/><path d="M13.5 10.5a4 4 0 0 0-5.7 0l-3 3a4 4 0 1 0 5.7 5.7l1.2-1.2"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.6v12.8L19 12 8 5.6Z" fill="currentColor"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21 3-9.5 9.5M21 3l-6.2 18-3.3-8.5L3 9.2 21 3Z"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 6.5 12 2.5l4 4"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.4"/><path d="M7.5 5v14M16.5 5v14M3 12h18M3 8.5h4.5M3 15.5h4.5M16.5 8.5H21M16.5 15.5H21"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4.2L20 8.2a2.2 2.2 0 0 0-3.1-3.1L5 16.9 4 20Z"/></symbol>
+    <symbol id="i-exit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 20H5.5A1.5 1.5 0 0 1 4 18.5v-13A1.5 1.5 0 0 1 5.5 4H14"/><path d="M17 8.5 20.5 12 17 15.5M9.5 12h11"/></symbol>
+    <symbol id="i-smile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.2a4.4 4.4 0 0 0 7 0"/><path d="M9 9.6h.01M15 9.6h.01" stroke-width="2.4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 6.5"/></symbol>
+    <symbol id="i-fullscreen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></symbol>
+  </svg>
+
+  <!-- ------------------------------- шапка ------------------------------- -->
+  <header class="room-header">
+    <div class="room-header-inner">
+      <a class="brand brand-compact" href="/" aria-label="COFfeeIT Cinema — на главную">
+        <span class="brand-mark"><svg><use href="#i-logo"/></svg></span>
+        <span class="brand-text">COFfeeIT<small>cinema</small></span>
+      </a>
+
+      <button class="room-code" id="copy-code" type="button" title="Скопировать код комнаты">
+        <span class="room-code-label">код</span>
+        <span id="room-code-value">······</span>
+        <svg><use href="#i-copy"/></svg>
+      </button>
+
+      <div class="room-header-right">
+        <span class="connection is-waiting" id="connection"><i></i><span id="connection-text">Подключение…</span></span>
+        <button class="btn btn-ghost btn-sm" id="invite-btn" type="button">
+          <svg><use href="#i-users"/></svg>
+          <span class="hide-sm">Пригласить</span>
+        </button>
+        <button class="btn btn-primary btn-sm" id="add-video-btn" type="button">
+          <svg><use href="#i-plus"/></svg>
+          <span class="hide-sm">Видео</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ------------------------------- сцена ------------------------------- -->
+  <main class="room-main">
+    <section class="stage-col">
+      <div class="player-shell" id="player-shell">
+        <div class="player-stage" id="player-stage"></div>
+
+        <div class="reactions-layer" id="reactions-layer" aria-hidden="true"></div>
+
+        <div class="player-overlay" id="player-overlay">
+          <div class="empty-state" id="empty-state">
+            <div class="empty-badge"><svg><use href="#i-film"/></svg></div>
+            <h2 id="empty-title">Здесь начнётся ваш сеанс</h2>
+            <p id="empty-text">Вставьте ссылку на видео — и все в комнате увидят его одновременно.</p>
+            <form class="empty-form" id="empty-form" autocomplete="off">
+              <label class="field">
+                <svg aria-hidden="true"><use href="#i-link"/></svg>
+                <span class="sr-only">Ссылка на видео</span>
+                <input id="empty-input" type="url" inputmode="url" placeholder="https://youtube.com/watch?v=…" spellcheck="false">
+              </label>
+              <button class="btn btn-primary" type="submit" id="empty-submit">Включить</button>
+            </form>
+            <div class="empty-note" id="empty-note">
+              <span class="dot"></span>
+              <span id="empty-hint">YouTube, Vimeo, mp4, m3u8 — плеер синхронизируется у всех</span>
+            </div>
+          </div>
+
+          <div class="empty-state empty-waiting" id="empty-waiting" hidden>
+            <div class="empty-badge is-pulsing"><svg><use href="#i-sync"/></svg></div>
+            <h2>Хост выбирает видео</h2>
+            <p>Как только он включит фильм, плеер появится у всех. Можно пока поболтать в чате.</p>
+            <div class="waiting-dots"><i></i><i></i><i></i></div>
+          </div>
+        </div>
+
+        <div class="player-loader" id="player-loader" hidden>
+          <span class="spinner"></span>
+          <span id="loader-text">Загружаем плеер…</span>
+        </div>
+
+        <div class="sync-badge" id="sync-badge" hidden>
+          <i></i><span id="sync-badge-text">Синхронизировано</span>
+        </div>
+
+        <div class="player-banner" id="player-banner" hidden>
+          <span>Браузер не включил видео автоматически.</span>
+          <button class="btn btn-primary btn-sm" id="unmute-btn" type="button">Включить звук и синхронизироваться</button>
+        </div>
+
+        <button class="player-fullscreen" id="fullscreen-btn" type="button" title="Полный экран" aria-label="Полный экран">
+          <svg><use href="#i-fullscreen"/></svg>
+        </button>
+      </div>
+
+      <div class="room-meta">
+        <div class="room-title-wrap">
+          <h1 id="room-title">Кинорум</h1>
+          <div class="room-sub">
+            <span class="chip" id="source-chip"><svg><use href="#i-film"/></svg> видео не выбрано</span>
+            <span class="room-host" id="host-label">Хост: —</span>
+            <span class="room-drift" id="drift-label" hidden></span>
+          </div>
+        </div>
+
+        <div class="room-actions">
+          <button class="btn btn-ghost btn-sm" id="resync-btn" type="button" title="Подстроиться под текущую секунду">
+            <svg><use href="#i-sync"/></svg>
+            <span class="hide-sm">Синхронизировать</span>
+          </button>
+          <button class="btn btn-quiet btn-sm" id="rename-btn" type="button" hidden title="Переименовать комнату">
+            <svg><use href="#i-edit"/></svg>
+          </button>
+          <div class="mode-toggle" id="mode-toggle" role="group" aria-label="Кто управляет плеером" hidden>
+            <button type="button" data-mode="host" class="is-active">Хост</button>
+            <button type="button" data-mode="all">Все</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ----------------------------- сайдбар ----------------------------- -->
+    <aside class="side" id="side">
+      <div class="side-tabs" role="tablist">
+        <button class="side-tab is-active" data-tab="chat" role="tab" aria-selected="true" id="tab-chat">Чат</button>
+        <button class="side-tab" data-tab="people" role="tab" aria-selected="false" id="tab-people">
+          Участники <span class="tab-count" id="people-count">1</span>
+        </button>
+      </div>
+
+      <div class="side-panel" id="panel-chat" role="tabpanel" aria-labelledby="tab-chat">
+        <div class="messages" id="messages" aria-live="polite"></div>
+        <div class="typing" id="typing" hidden><span id="typing-text"></span></div>
+        <form class="composer" id="composer">
+          <div class="composer-box">
+            <textarea id="message-input" rows="1" maxlength="600" placeholder="Написать в чат…" aria-label="Сообщение"></textarea>
+            <button class="send-btn" type="submit" aria-label="Отправить">
+              <svg><use href="#i-send"/></svg>
+            </button>
+          </div>
+          <div class="quick-reactions" id="quick-reactions" aria-label="Быстрые реакции">
+            <button type="button" data-emoji="❤️">❤️</button>
+            <button type="button" data-emoji="😂">😂</button>
+            <button type="button" data-emoji="🔥">🔥</button>
+            <button type="button" data-emoji="👏">👏</button>
+            <button type="button" data-emoji="😮">😮</button>
+            <button type="button" data-emoji="🍿">🍿</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="side-panel" id="panel-people" role="tabpanel" aria-labelledby="tab-people" hidden>
+        <ul class="people-list" id="people-list"></ul>
+        <div class="people-foot">
+          <span class="hint" id="mode-hint">Управляет хост</span>
+          <a class="btn btn-quiet btn-sm btn-danger" href="/">
+            <svg><use href="#i-exit"/></svg> Выйти
+          </a>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- --------------------------- модалка: имя --------------------------- -->
+  <div class="modal" id="name-modal" hidden>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="name-title">
+      <div class="welcome-mark"><svg><use href="#i-logo"/></svg></div>
+      <h3 id="name-title">Как вас представить?</h3>
+      <p class="modal-sub">Имя увидят другие участники в чате и списке комнаты. Регистрация не нужна.</p>
+      <form id="name-form" autocomplete="off">
+        <label class="label" for="name-input">Ваше имя</label>
+        <input class="input" id="name-input" maxlength="32" placeholder="Например, Аня" autocomplete="off">
+        <div class="color-row" id="color-row" role="group" aria-label="Цвет аватара"></div>
+        <button class="btn btn-primary btn-block" type="submit" id="name-submit" style="margin-top:20px">
+          Войти в комнату
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ------------------------- модалка: приглашение ---------------------- -->
+  <div class="modal" id="invite-modal" hidden>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="invite-title">
+      <button class="modal-close" type="button" data-close-modal><svg><use href="#i-close"/></svg></button>
+      <h3 id="invite-title">Зовите своих</h3>
+      <p class="modal-sub">Отправьте ссылку или код — больше ничего не нужно.</p>
+
+      <label class="label">Ссылка на комнату</label>
+      <div class="invite-link-row">
+        <input class="input" id="invite-link" readonly spellcheck="false">
+        <button class="btn btn-primary btn-sm" id="copy-link" type="button">Копировать</button>
+      </div>
+
+      <div class="invite-code-block">
+        <span class="invite-code-label">код комнаты</span>
+        <button class="invite-code" id="invite-code" type="button" title="Скопировать код">······</button>
+      </div>
+
+      <div class="share-row">
+        <a class="share-btn" id="share-telegram" target="_blank" rel="noopener">
+          <span class="share-icon" style="background:linear-gradient(140deg,#4fc3f7,#2b82c9)">✈</span> Telegram
+        </a>
+        <a class="share-btn" id="share-whatsapp" target="_blank" rel="noopener">
+          <span class="share-icon" style="background:linear-gradient(140deg,#78e08f,#2f9e5f)">✆</span> WhatsApp
+        </a>
+        <a class="share-btn" id="share-vk" target="_blank" rel="noopener">
+          <span class="share-icon" style="background:linear-gradient(140deg,#7ba7e0,#3d6ea8)">vk</span> ВКонтакте
+        </a>
+        <button class="share-btn" id="share-native" type="button" hidden>
+          <span class="share-icon" style="background:linear-gradient(140deg,#ffca74,#e0872a)">↗</span> Поделиться
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- --------------------------- модалка: видео -------------------------- -->
+  <div class="modal" id="source-modal" hidden>
+    <div class="modal-panel modal-wide" role="dialog" aria-modal="true" aria-labelledby="source-title">
+      <button class="modal-close" type="button" data-close-modal><svg><use href="#i-close"/></svg></button>
+      <h3 id="source-title">Что смотрим?</h3>
+      <p class="modal-sub">Вставьте ссылку. Плеер появится у всех участников комнаты.</p>
+      <form id="source-form" autocomplete="off">
+        <label class="label" for="source-input">Ссылка на видео</label>
+        <label class="field">
+          <svg aria-hidden="true"><use href="#i-link"/></svg>
+          <input id="source-input" type="url" inputmode="url" placeholder="https://youtube.com/watch?v=…" spellcheck="false">
+        </label>
+        <div class="detect-line" id="source-detect">
+          <span class="dot"></span>
+          <span id="source-detect-text">YouTube, Vimeo, Rutube, VK, mp4, m3u8 и другие ссылки</span>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary btn-block" type="submit" id="source-submit">Включить видео</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ---------------------------- модалка: имя комнаты ------------------- -->
+  <div class="modal" id="rename-modal" hidden>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="rename-title">
+      <button class="modal-close" type="button" data-close-modal><svg><use href="#i-close"/></svg></button>
+      <h3 id="rename-title">Название комнаты</h3>
+      <p class="modal-sub">Например: «Вечер пятницы» или «Смотрим сериал».</p>
+      <form id="rename-form" autocomplete="off">
+        <input class="input" id="rename-input" maxlength="80" placeholder="Кинорум">
+        <div class="modal-actions">
+          <button class="btn btn-primary btn-block" type="submit">Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- --------------------------- комната не найдена ---------------------- -->
+  <div class="fatal" id="fatal" hidden>
+    <div class="fatal-card">
+      <div class="empty-badge"><svg><use href="#i-film"/></svg></div>
+      <h2 id="fatal-title">Комната не найдена</h2>
+      <p id="fatal-text">Возможно, ссылка устарела или комната закрылась. Создайте новую — это займёт секунду.</p>
+      <div class="fatal-actions">
+        <a class="btn btn-primary" href="/">Создать комнату</a>
+        <a class="btn btn-ghost" href="/#join">Войти по коду</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-layer" id="toast-layer" aria-live="polite"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/room.js" type="module"></script>
+</body>
+</html>
