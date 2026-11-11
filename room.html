@@ -1,17 +1,26 @@
 <!doctype html>
 <html lang="ru">
 <head>
+  <script>
+    (function(){
+      var head=document.getElementsByTagName('head')[0],base=document.createElement('base');
+      var seg=location.pathname.split('/').filter(Boolean);
+      base.href=(seg.length>=2 ? '/'+seg.slice(0,2).join('/')+'/' : '/');
+      head.insertBefore(base,head.firstChild);
+    })();
+  </script>
+
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Кинозал — COFfeeIT Cinema</title>
   <meta name="description" content="Совместный просмотр в COFfeeIT Cinema: синхронный плеер, чат и реакции.">
   <meta name="theme-color" content="#0b0807">
   <meta name="robots" content="noindex">
-  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="preload" href="/vendor/manrope-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="/vendor/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/base.css">
-  <link rel="stylesheet" href="/css/room.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="vendor/manrope-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="vendor/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/room.css">
 </head>
 <body class="room-body">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -41,7 +50,7 @@
   <!-- ------------------------------- шапка ------------------------------- -->
   <header class="room-header">
     <div class="room-header-inner">
-      <a class="brand brand-compact" href="/" aria-label="COFfeeIT Cinema — на главную">
+      <a class="brand brand-compact" href="" aria-label="COFfeeIT Cinema — на главную">
         <span class="brand-mark"><svg><use href="#i-logo"/></svg></span>
         <span class="brand-text">COFfeeIT<small>cinema</small></span>
       </a>
@@ -180,7 +189,7 @@
         <ul class="people-list" id="people-list"></ul>
         <div class="people-foot">
           <span class="hint" id="mode-hint">Управляет хост</span>
-          <a class="btn btn-quiet btn-sm btn-danger" href="/">
+          <a class="btn btn-quiet btn-sm btn-danger" href="">
             <svg><use href="#i-exit"/></svg> Выйти
           </a>
         </div>
@@ -285,15 +294,15 @@
       <h2 id="fatal-title">Комната не найдена</h2>
       <p id="fatal-text">Возможно, ссылка устарела или комната закрылась. Создайте новую — это займёт секунду.</p>
       <div class="fatal-actions">
-        <a class="btn btn-primary" href="/">Создать комнату</a>
-        <a class="btn btn-ghost" href="/#join">Войти по коду</a>
+        <a class="btn btn-primary" href="">Создать комнату</a>
+        <a class="btn btn-ghost" href="#join">Войти по коду</a>
       </div>
     </div>
   </div>
 
   <div class="toast-layer" id="toast-layer" aria-live="polite"></div>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/room.js" type="module"></script>
+  <script src="socket.io/socket.io.js"></script>
+  <script src="js/room.js" type="module"></script>
 </body>
 </html>
