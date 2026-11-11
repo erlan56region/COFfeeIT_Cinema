@@ -1,0 +1,13 @@
+# Конфигурация для Render (https://render.com)
+# Достаточно подключить репозиторий — параметры подхватятся автоматически.
+services:
+  - type: web
+    name: syncwatch
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production

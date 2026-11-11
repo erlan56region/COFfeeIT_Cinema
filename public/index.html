@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#4f46e5">
+<meta name="description" content="Совместный просмотр видео в реальном времени. Вставьте ссылку — и все участники смотрят синхронно.">
+<title>SyncWatch — совместный просмотр видео</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== ЭКРАН ВХОДА ===== -->
+<div id="lobby" class="lobby">
+  <div class="lobby-bg"></div>
+
+  <div class="lobby-wrap">
+    <!-- Левая колонка: форма -->
+    <div class="lobby-panel">
+      <div class="logo-row">
+        <div class="logo-mark">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5Z" fill="currentColor"/></svg>
+        </div>
+        <div>
+          <div class="logo-name">SyncWatch</div>
+          <div class="logo-sub">Совместный просмотр видео</div>
+        </div>
+      </div>
+
+      <h1>Смотрите кино вместе,<br>даже если вы в разных городах</h1>
+      <p class="lobby-sub">Вставьте ссылку на видео — воспроизведение, пауза и перемотка синхронизируются у всех участников. Регистрация не требуется.</p>
+
+      <div class="trust-row">
+        <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Бесплатно</span>
+        <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Без регистрации</span>
+        <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Телефон, планшет, ноутбук</span>
+      </div>
+
+      <div class="form-block">
+        <label class="field-label" for="nameInput">Ваше имя</label>
+        <input id="nameInput" class="input" type="text" placeholder="Например, Анна" maxlength="24" autocomplete="name">
+
+        <div class="color-row" id="colorRow">
+          <span class="field-label tight">Цвет профиля:</span>
+          <button type="button" class="color-dot active" data-color="#4f46e5" style="background:#4f46e5" aria-label="Индиго"></button>
+          <button type="button" class="color-dot" data-color="#0ea5e9" style="background:#0ea5e9" aria-label="Голубой"></button>
+          <button type="button" class="color-dot" data-color="#10b981" style="background:#10b981" aria-label="Зелёный"></button>
+          <button type="button" class="color-dot" data-color="#f59e0b" style="background:#f59e0b" aria-label="Янтарный"></button>
+          <button type="button" class="color-dot" data-color="#ef4444" style="background:#ef4444" aria-label="Красный"></button>
+          <button type="button" class="color-dot" data-color="#64748b" style="background:#64748b" aria-label="Серый"></button>
+        </div>
+
+        <button id="createBtn" class="btn btn-primary btn-big">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+          Создать комнату
+        </button>
+        <p class="btn-hint">Вы получите код комнаты — отправьте его участникам</p>
+
+        <div class="divider"><span>или присоединиться по коду</span></div>
+
+        <div class="join-row">
+          <input id="roomInput" class="input code-input" type="text" placeholder="КОД" maxlength="6" autocomplete="off" autocapitalize="characters">
+          <button id="joinBtn" class="btn btn-secondary">Присоединиться</button>
+        </div>
+        <p id="lobbyError" class="error"></p>
+      </div>
+
+      <div class="how">
+        <div class="how-item"><span class="how-num">1</span><div><b>Создайте комнату</b><small>и поделитесь кодом с участниками</small></div></div>
+        <div class="how-item"><span class="how-num">2</span><div><b>Вставьте ссылку</b><small>YouTube, Vimeo или прямая ссылка на видео</small></div></div>
+        <div class="how-item"><span class="how-num">3</span><div><b>Нажмите «Смотреть»</b><small>у всех участников видео начнётся одновременно</small></div></div>
+      </div>
+    </div>
+
+    <!-- Правая колонка: фотографии -->
+    <aside class="lobby-visual" aria-label="Фотографии совместного просмотра">
+      <figure class="visual-main">
+        <img src="images/hero.jpg" alt="Трое друзей вместе смотрят фильм дома на ноутбуке" loading="eager">
+        <figcaption class="visual-overlay">
+          <span class="visual-tag"><span class="dot"></span> В комнате 3 участника</span>
+          <strong>Вечер пятницы,<br>одна комната</strong>
+        </figcaption>
+      </figure>
+
+      <figure class="visual-card">
+        <img src="images/photo-3.jpg" alt="Попкорн, лимонад и ноутбук на журнальном столике" loading="lazy">
+      </figure>
+
+      <div class="visual-price">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+        Пауза и перемотка<br>синхронны у всех
+      </div>
+
+      <figure class="visual-face">
+        <img src="images/photo-2.jpg" alt="Девушка смотрит фильм на ноутбуке с чашкой чая" loading="lazy">
+      </figure>
+    </aside>
+  </div>
+
+  <div class="lobby-gallery">
+    <div class="gallery-head">
+      <h2>Как это выглядит</h2>
+      <p>Каждый смотрит у себя дома — фильм идёт одновременно у всех.</p>
+    </div>
+    <div class="gallery-grid">
+      <figure class="gallery-item">
+        <img src="images/hero.jpg" alt="Друзья смотрят фильм вместе" loading="lazy">
+        <figcaption><b>Вместе, но каждый у себя</b><span>Соберите друзей в одной комнате по коду</span></figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <img src="images/photo-2.jpg" alt="Просмотр фильма дома на ноутбуке" loading="lazy">
+        <figcaption><b>Один фильм — один момент</b><span>Пауза, перемотка и старт совпадают до секунды</span></figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <img src="images/photo-3.jpg" alt="Попкорн и напитки на столе перед просмотром" loading="lazy">
+        <figcaption><b>С попкорном и чатом</b><span>Обсуждайте сюжет, не выходя из комнаты</span></figcaption>
+      </figure>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ГЛАВНЫЙ ЭКРАН ===== -->
+<div id="app" class="app hidden">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo-mark small">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5Z" fill="currentColor"/></svg>
+      </div>
+      <span>SyncWatch</span>
+    </div>
+    <div class="top-actions">
+      <div class="greeting" id="greeting">
+        <img class="greet-photo" src="images/photo-2.jpg" alt="" aria-hidden="true">
+        <span id="greetingText">Здравствуйте</span>
+      </div>
+      <div class="sync-pill" id="syncPill"><span class="sync-dot"></span><span id="syncText">Синхронизировано</span></div>
+      <button class="room-chip" id="copyRoomBtn" title="Скопировать ссылку-приглашение" aria-label="Скопировать ссылку на комнату">
+        Комната <b id="roomCode">------</b>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+      </button>
+      <button class="icon-btn" id="helpBtn" aria-label="Справка">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+      </button>
+      <div class="users-chip">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <b id="usersCount">1</b>
+      </div>
+      <button class="btn btn-secondary btn-sm" id="leaveBtn">Покинуть</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="stage">
+      <div class="steps-bar" id="stepsBar">
+        <div class="step-pill done" id="step1"><span class="step-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span> Комната создана</div>
+        <div class="step-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="step-pill" id="step2"><span class="step-num">2</span> Пригласите участников</div>
+        <div class="step-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="step-pill" id="step3"><span class="step-num">3</span> Вставьте ссылку</div>
+      </div>
+      <p class="steps-hint" id="stepsHint">Нажмите на код комнаты в шапке, чтобы скопировать ссылку-приглашение</p>
+
+      <div class="paste-box" id="pasteBox">
+        <div class="paste-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </div>
+        <div class="paste-main">
+          <label class="paste-label" for="urlInput">Ссылка на видео</label>
+          <input id="urlInput" class="input paste-input" type="url" inputmode="url" placeholder="https://youtube.com/watch?v=…" autocomplete="off">
+          <span class="paste-hint">Поддерживаются YouTube, Vimeo и прямые ссылки (MP4, WebM)</span>
+        </div>
+        <div class="paste-actions">
+          <button id="pasteFromClipboard" class="btn btn-secondary btn-sm paste-clip-btn" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+            Вставить
+          </button>
+          <button id="loadBtn" class="btn btn-primary">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5Z"/></svg>
+            Смотреть
+          </button>
+          <button id="queueBtn" class="btn btn-secondary" title="Добавить в очередь">В очередь</button>
+        </div>
+      </div>
+
+      <div class="quick-row">
+        <span class="quick-label">Быстрый старт:</span>
+        <button class="quick-btn" data-url="https://www.youtube.com/watch?v=dQw4w9WgXcQ">YouTube — пример</button>
+        <button class="quick-btn" data-url="https://media.w3.org/2010/05/sintel/trailer.mp4">Sintel — трейлер (MP4)</button>
+        <button class="quick-btn" data-url="https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4">Big Buck Bunny (MP4)</button>
+      </div>
+
+      <div class="player-wrap" id="playerWrap">
+        <div id="emptyState" class="empty-state">
+          <div class="empty-text">
+            <div class="empty-icon">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M10 9.5v5l4.5-2.5L10 9.5Z" fill="currentColor" stroke="none"/></svg>
+            </div>
+            <h2>Видео ещё не выбрано</h2>
+            <p>Вставьте ссылку в поле выше и нажмите <b>«Смотреть»</b>. Видео начнёт воспроизводиться у всех участников одновременно.</p>
+            <div class="empty-badges">
+              <span>YouTube</span><span>Vimeo</span><span>MP4 / WebM</span><span>Чат</span><span>Синхронизация</span>
+            </div>
+            <p class="empty-tip">Совет: нажмите на код комнаты в шапке, чтобы скопировать ссылку-приглашение</p>
+          </div>
+          <figure class="empty-photo">
+            <img src="images/photo-3.jpg" alt="Попкорн и напитки перед совместным просмотром" loading="lazy">
+            <figcaption>Всё готово к просмотру</figcaption>
+          </figure>
+        </div>
+
+        <div id="videoSlot" class="hidden">
+          <div id="ytContainer" class="hidden"><div id="ytPlayer"></div></div>
+          <video id="htmlVideo" class="hidden" playsinline preload="metadata"></video>
+          <div id="videoFallback" class="video-fallback hidden"></div>
+        </div>
+        <div id="reactionLayer" class="reaction-layer"></div>
+        <button id="bigPlay" class="big-play hidden" aria-label="Воспроизвести">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5Z"/></svg>
+        </button>
+      </div>
+
+      <div class="controls">
+        <button id="playPauseBtn" class="ctrl-btn main-ctrl" aria-label="Воспроизвести или пауза">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5Z"/></svg>
+        </button>
+        <button id="back10" class="ctrl-btn" title="Назад на 10 секунд" aria-label="Назад на 10 секунд">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+        </button>
+        <button id="fwd10" class="ctrl-btn" title="Вперёд на 10 секунд" aria-label="Вперёд на 10 секунд">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+        </button>
+        <div class="seek-wrap">
+          <input type="range" id="seekBar" min="0" max="100" value="0" step="0.1" aria-label="Позиция воспроизведения">
+          <div class="time-row"><span id="curTime">0:00</span><span id="durTime">0:00</span></div>
+        </div>
+        <span class="vol-icon">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+        </span>
+        <input type="range" id="volBar" min="0" max="100" value="80" class="vol-bar" aria-label="Громкость">
+        <button id="fsBtn" class="ctrl-btn" title="Полный экран" aria-label="Полный экран">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+        </button>
+      </div>
+      <p class="controls-hint">Воспроизведение, пауза и перемотка синхронизируются у всех участников.</p>
+
+      <div class="now-playing" id="nowPlaying">
+        <span class="np-label">Сейчас смотрят:</span>
+        <span id="npTitle">ничего не выбрано</span>
+        <span id="npBy" class="np-by"></span>
+      </div>
+
+      <div class="reactions-bar">
+        <span class="react-label">Реакция:</span>
+        <button class="react-btn" data-emoji="heart" title="Нравится" aria-label="Нравится"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 5.6a5.5 5.5 0 0 0-7.8 0L12 6.6l-1-1a5.5 5.5 0 0 0-7.8 7.8L12 22l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></svg></button>
+        <button class="react-btn" data-emoji="fire" title="Отлично" aria-label="Отлично"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2s5 4.5 5 9a5 5 0 0 1-10 0c0-1.5.6-2.8 1.5-3.8C9 8.9 10 10 11 10.5 10.5 7 12 3 12 2Z"/><path d="M8.5 17.5a3.5 3.5 0 0 0 7 0"/></svg></button>
+        <button class="react-btn" data-emoji="laugh" title="Смешно" aria-label="Смешно"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M7.5 9.5h.01M16.5 9.5h.01"/><path d="M7.5 14a5.5 5.5 0 0 0 9 0"/></svg></button>
+        <button class="react-btn" data-emoji="wow" title="Удивительно" aria-label="Удивительно"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M8 9.5h.01M16 9.5h.01"/><ellipse cx="12" cy="15.5" rx="2.2" ry="2.6"/></svg></button>
+        <button class="react-btn" data-emoji="clap" title="Аплодисменты" aria-label="Аплодисменты"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a7 7 0 0 1-7-7V9a1.8 1.8 0 0 1 3.6 0v2-4.5a1.8 1.8 0 0 1 3.6 0V11 5.5a1.8 1.8 0 0 1 3.6 0V11"/><path d="M18.8 11.5a1.8 1.8 0 0 1 3.6 0V15a6 6 0 0 1-6 6Z"/></svg></button>
+        <button class="react-btn" data-emoji="sad" title="Грустно" aria-label="Грустно"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M8 10h.01M16 10h.01"/><path d="M8 17a5 5 0 0 1 8 0"/><path d="M10.5 6.5c.6-1 2.4-1 3 0"/></svg></button>
+        <button class="react-btn" data-emoji="party" title="Праздник" aria-label="Праздник"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3Z"/><path d="M18 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1Z"/></svg></button>
+        <span class="react-hint">реакции отображаются у всех участников</span>
+      </div>
+    </section>
+
+    <aside class="sidebar">
+      <div class="tabs">
+        <button class="tab active" data-tab="chat">Чат</button>
+        <button class="tab" data-tab="queue">Очередь <span id="queueBadge" class="badge hidden">0</span></button>
+        <button class="tab" data-tab="users">Участники</button>
+      </div>
+
+      <div id="tab-chat" class="tab-pane active">
+        <div id="chatMessages" class="chat-messages"></div>
+        <form id="chatForm" class="chat-form">
+          <input id="chatInput" class="input" type="text" placeholder="Сообщение…" maxlength="500" autocomplete="off" enterkeyhint="send">
+          <button class="btn btn-primary btn-sm" type="submit" aria-label="Отправить">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4 20-7Z"/></svg>
+          </button>
+        </form>
+      </div>
+
+      <div id="tab-queue" class="tab-pane">
+        <div id="queueList" class="queue-list"><p class="muted">Очередь пуста.<br>Добавьте видео кнопкой «В очередь».</p></div>
+        <button id="nextBtn" class="btn btn-primary btn-block">Следующее видео</button>
+      </div>
+
+      <div id="tab-users" class="tab-pane">
+        <p class="users-intro">Участники комнаты</p>
+        <div id="usersList" class="users-list"></div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="app-foot">
+    <div class="foot-strip" aria-hidden="true">
+      <img src="images/hero.jpg" alt="">
+      <img src="images/photo-3.jpg" alt="">
+      <img src="images/photo-2.jpg" alt="">
+    </div>
+    <span>SyncWatch — совместный просмотр видео в реальном времени</span>
+  </footer>
+</div>
+
+<!-- ===== СПРАВКА ===== -->
+<div id="helpModal" class="help-modal hidden" role="dialog" aria-modal="true" aria-label="Как это работает">
+  <div class="help-card">
+    <button class="help-close" id="helpClose" aria-label="Закрыть">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+    <h2>Как это работает</h2>
+    <p class="help-lead">Три шага — и вы смотрите видео вместе.</p>
+    <div class="help-steps">
+      <div class="help-step"><span class="help-num">1</span><div><b>Создайте комнату</b><p>Введите имя и нажмите «Создать комнату». Вы получите код из 6 символов.</p></div></div>
+      <div class="help-step"><span class="help-num">2</span><div><b>Пригласите участников</b><p>Нажмите на код комнаты в шапке — ссылка скопируется. Отправьте её участникам; они откроют её и попадут в комнату.</p></div></div>
+      <div class="help-step"><span class="help-num">3</span><div><b>Вставьте ссылку и нажмите «Смотреть»</b><p>Поддерживаются YouTube, Vimeo и прямые ссылки на видео. Воспроизведение начнётся одновременно у всех.</p></div></div>
+    </div>
+    <div class="help-tips">
+      <b>Полезно знать</b>
+      <ul>
+        <li>Пауза и перемотка общие для всех участников</li>
+        <li>Чат находится справа (на мобильных — вкладка под плеером)</li>
+        <li>Кнопка «В очередь» добавляет видео для последующего просмотра</li>
+        <li>Работает на телефоне, планшете и компьютере</li>
+      </ul>
+    </div>
+    <button class="btn btn-primary btn-big" id="helpOk">Понятно</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://www.youtube.com/iframe_api"></script>
+<script src="https://player.vimeo.com/api/player.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
