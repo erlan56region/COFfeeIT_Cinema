@@ -33,14 +33,37 @@ const rooms = new Map();
 
 // Допустимые типы реакций (ключи иконок на клиенте)
 const REACTION_KEYS = ['heart', 'fire', 'laugh', 'wow', 'clap', 'sad', 'party'];
-const VIDEO_TYPES = ['youtube', 'vimeo', 'direct'];
+// link — ссылка на страницу другого сайта: в комнате её видят все, открывает каждый в своём браузере
+const VIDEO_TYPES = ['youtube', 'vimeo', 'direct', 'link'];
 
-// Разрешены только http/https-ссылки
+// Разрешены только настоящие адреса http/https
 function safeUrl(value) {
   if (typeof value !== 'string') return null;
-  const url = value.trim();
-  if (!/^https?:\/\//i.test(url)) return null;
-  return url.slice(0, 2000);
+  const url = value.trim().slice(0, 2000);
+  if (!/^https?:\/\//i.test(url) || /[\u0000-\u001f\u007f]/.test(url)) return null;
+  try {
+    const host = new URL(url).hostname;
+    // знак % в имени сайта остаётся только от недопустимых символов, например от пробела
+    if (!host || host.includes('%')) return null;
+  } catch (e) {
+    return null;
+  }
+  return url;
+}
+
+// Название ссылки на сайт — её домен. Берётся из самого адреса, а не из присланного названия:
+// участники должны видеть, куда на самом деле ведёт ссылка
+function siteName(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '') || 'Сайт';
+  } catch (e) {
+    return 'Сайт';
+  }
+}
+
+// Название видео или ссылки, которое показывается участникам
+function videoTitle(type, url, title) {
+  return type === 'link' ? siteName(url) : String(title || 'Видео').slice(0, 200);
 }
 
 function toFiniteNumber(value) {
@@ -154,7 +177,7 @@ io.on('connection', (socket) => {
       return;
     }
     const type = VIDEO_TYPES.includes(data.type) ? data.type : 'direct';
-    const title = String(data.title || 'Видео').slice(0, 200);
+    const title = videoTitle(type, url, data.title);
 
     target.video = { url, type, title, addedBy: socket.id, addedByName: userName };
     target.playing = false;
@@ -162,7 +185,7 @@ io.on('connection', (socket) => {
     target.startedAt = null;
 
     io.to(currentRoom).emit('video_changed', { video: target.video, state: getRoomState(target) });
-    io.to(currentRoom).emit('system_message', { text: `${userName} добавил видео: ${title}`, time: Date.now() });
+    io.to(currentRoom).emit('system_message', { text: type === 'link' ? `${userName} поделился ссылкой на сайт` : `${userName} добавил видео: ${title}`, time: Date.now() });
   });
 
   // Play
@@ -246,12 +269,12 @@ io.on('connection', (socket) => {
       return;
     }
     const type = VIDEO_TYPES.includes(data.type) ? data.type : 'direct';
-    const title = String(data.title || 'Видео').slice(0, 200);
+    const title = videoTitle(type, url, data.title);
     const item = { id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, url, type, title, addedByName: userName };
 
     target.queue.push(item);
     io.to(currentRoom).emit('queue_update', target.queue);
-    io.to(currentRoom).emit('system_message', { text: `${userName} добавил в очередь: ${title}`, time: Date.now() });
+    io.to(currentRoom).emit('system_message', { text: type === 'link' ? `${userName} добавил в очередь ссылку на сайт` : `${userName} добавил в очередь: ${title}`, time: Date.now() });
   });
 
   socket.on('queue_remove', (payload) => {

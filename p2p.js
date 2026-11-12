@@ -22,7 +22,8 @@
   const ROOM_PREFIX = 'syncwatch-room-';
   const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const REACTION_KEYS = ['heart', 'fire', 'laugh', 'wow', 'clap', 'sad', 'party'];
-  const VIDEO_TYPES = ['youtube', 'vimeo', 'direct'];
+  // link — ссылка на страницу другого сайта: в комнате её видят все, открывает каждый в своём браузере
+  const VIDEO_TYPES = ['youtube', 'vimeo', 'direct', 'link'];
   const DEFAULT_COLOR = '#4f46e5';
   const MAX_MEMBERS = 30;
   const MAX_QUEUE = 50;
@@ -115,9 +116,29 @@
   }
   function safeUrl(value) {
     if (typeof value !== 'string') return null;
-    const url = value.trim();
+    const url = value.trim().slice(0, 2000);
     if (!/^https?:\/\//i.test(url) || /[\u0000-\u001f\u007f]/.test(url)) return null;
-    return url.slice(0, 2000);
+    try {
+      const host = new URL(url).hostname;
+      // знак % в имени сайта остаётся только от недопустимых символов, например от пробела
+      if (!host || host.includes('%')) return null;
+    } catch (e) {
+      return null;
+    }
+    return url;
+  }
+  // Название ссылки на сайт — её домен. Берётся из самого адреса, а не из присланного названия:
+  // участники должны видеть, куда на самом деле ведёт ссылка
+  function siteName(url) {
+    try {
+      return new URL(url).hostname.replace(/^www\./, '') || 'Сайт';
+    } catch (e) {
+      return 'Сайт';
+    }
+  }
+  // Название видео или ссылки, которое показывается участникам
+  function videoTitle(type, url, title) {
+    return type === 'link' ? siteName(url) : (cleanText(String(title || 'Видео'), 200) || 'Видео');
   }
   function finiteNum(value) {
     if (value === null || value === undefined || value === '') return null;
@@ -347,9 +368,9 @@
           return;
         }
         const type = VIDEO_TYPES.includes(data.type) ? data.type : 'direct';
-        const title = cleanText(String(data.title || 'Видео'), 200) || 'Видео';
+        const title = videoTitle(type, url, data.title);
         this.setVideo({ url, type, title, addedBy: memberId, addedByName: user.name });
-        this.out.all('system_message', { text: `${user.name} добавил видео: ${title}`, time: Date.now() });
+        this.out.all('system_message', { text: type === 'link' ? `${user.name} поделился ссылкой на сайт` : `${user.name} добавил видео: ${title}`, time: Date.now() });
         return;
       }
       case 'play': {
@@ -409,11 +430,11 @@
           return;
         }
         const type = VIDEO_TYPES.includes(data.type) ? data.type : 'direct';
-        const title = cleanText(String(data.title || 'Видео'), 200) || 'Видео';
+        const title = videoTitle(type, url, data.title);
         this.queue.push({ id: `${Date.now()}_${randomId(6)}`, url, type, title, addedByName: user.name });
         this.touch();
         this.out.all('queue_update', this.queue);
-        this.out.all('system_message', { text: `${user.name} добавил в очередь: ${title}`, time: Date.now() });
+        this.out.all('system_message', { text: type === 'link' ? `${user.name} добавил в очередь ссылку на сайт` : `${user.name} добавил в очередь: ${title}`, time: Date.now() });
         return;
       }
       case 'queue_remove': {
