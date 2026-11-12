@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>hold test</title>
+</head>
+<body>
+<h1>Hold test</h1>
+<p id="clock">clock: not started</p>
+<p id="events">events:</p>
+<img id="h1" alt="hold-httpbin" src="https://httpbin.org/delay/10?a=1" width="1" height="1">
+<img id="h2" alt="hold-postman" src="https://postman-echo.com/delay/10?a=1" width="1" height="1">
+<script>
+(function () {
+  var t0 = performance.now();
+  var clock = document.getElementById('clock');
+  var events = document.getElementById('events');
+  function ms() { return Math.round(performance.now() - t0); }
+  function note(text) { events.textContent += ' [' + ms() + ' ms: ' + text + ']'; }
+  setInterval(function () { clock.textContent = 'clock: ' + ms() + ' ms since script start; readyState=' + document.readyState; }, 100);
+  note('script started, readyState=' + document.readyState);
+  window.addEventListener('load', function () { note('window load'); });
+  document.addEventListener('DOMContentLoaded', function () { note('DOMContentLoaded'); });
+  ['h1', 'h2'].forEach(function (id) {
+    var img = document.getElementById(id);
+    if (!img) { note(id + ' missing'); return; }
+    img.addEventListener('load', function () { note(id + ' load'); });
+    img.addEventListener('error', function () { note(id + ' error'); });
+    note(id + ' complete=' + img.complete);
+  });
+})();
+</script>
+</body>
+</html>
