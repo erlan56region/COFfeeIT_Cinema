@@ -1,5 +1,18 @@
 /* ===== SyncWatch — клиент ===== */
-const socket = io();
+
+// Адрес сервера синхронизации задаётся в config.js.
+// Пустая строка — сервер находится там же, откуда открыт сайт (обычный запуск через Node.js).
+const SERVER_URL = String(window.SYNCWATCH_SERVER || '').trim().replace(/\/+$/, '');
+// Адрес сервера не задан, а страница открыта оттуда, где сервера заведомо нет:
+// как файл с диска или с GitHub Pages (*.github.io раздаёт только статические файлы)
+const OPENED_WITHOUT_SERVER = !SERVER_URL
+  && (location.protocol === 'file:' || /\.github\.io$/i.test(location.hostname));
+// Клиент Socket.IO лежит в vendor/. Если он не загрузился, интерфейс всё равно должен открыться
+const SOCKET_LIB_LOADED = typeof io === 'function';
+
+const socket = SOCKET_LIB_LOADED
+  ? io(SERVER_URL || undefined, { autoConnect: !OPENED_WITHOUT_SERVER })
+  : { connected: false, on() {}, emit() {}, disconnect() {} };
 
 // Безопасное хранилище: в песочнице/приватном режиме localStorage может быть недоступен
 const store = (() => {
@@ -570,6 +583,99 @@ setInterval(() => {
 
 setInterval(() => { if (roomId) socket.emit('sync_request'); }, 15000);
 
+// ===== Соединение с сервером =====
+// Сайт может открываться отдельно от сервера (например, с GitHub Pages), поэтому на экране входа
+// показываем состояние связи: connecting — подключаемся, online — на связи,
+// offline — связь пропала, noserver — по этому адресу сервера нет.
+const SLOW_AFTER = 75000; // «спящий» сервер просыпается примерно за минуту; если дольше — это уже неполадка
+let serverState = 'connecting';
+let wasOnline = false;
+let waitingSince = Date.now();
+let noticeTimer = null;
+let slowTimer = null;
+
+const CONNECTION_ERRORS = {
+  noserver: 'Сервер синхронизации не подключён — комнаты пока недоступны',
+  wait: 'Нет связи с сервером. Подождите несколько секунд и попробуйте ещё раз'
+};
+const NOTICE_SPINNER = '<span class="spin" aria-hidden="true"></span>';
+const NOTICE_WARNING = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 2.5 20h19L12 3.5Z"/><path d="M12 10v4.5M12 17.3h.01"/></svg>';
+
+function serverNoticeText() {
+  if (!SOCKET_LIB_LOADED) {
+    return { warn: true, title: 'Сайт загрузился не полностью', text: 'Не найден файл vendor/socket.io.min.js. Проверьте, что папка vendor загружена вместе с остальными файлами сайта.' };
+  }
+  if (serverState === 'noserver') {
+    return SERVER_URL
+      ? { warn: true, title: 'Сервер синхронизации не найден', text: `По адресу ${SERVER_URL} нет сервера SyncWatch. Проверьте адрес в файле config.js.` }
+      : { warn: true, title: 'Сервер синхронизации не подключён', text: 'Страница открыта без серверной части, поэтому создать комнату или войти в неё пока нельзя. Владельцу сайта: разверните server.js и укажите его адрес в файле config.js — инструкция в README.' };
+  }
+  if (Date.now() - waitingSince >= SLOW_AFTER) {
+    return { warn: true, title: 'Сервер не отвечает', text: SERVER_URL
+      ? `Не удаётся подключиться к ${SERVER_URL}. Попробуйте обновить страницу позже. Владельцу сайта: проверьте адрес в файле config.js и что сервер запущен.`
+      : 'Попробуйте обновить страницу чуть позже.' };
+  }
+  if (serverState === 'offline') {
+    return { warn: false, title: 'Связь с сервером потеряна', text: 'Пробуем подключиться снова…' };
+  }
+  return { warn: false, title: 'Подключаемся к серверу…', text: SERVER_URL ? 'Если сервер был в режиме сна, первое подключение может занять до минуты.' : 'Обычно это занимает пару секунд.' };
+}
+
+function renderServerNotice() {
+  const box = $('serverNotice');
+  clearTimeout(noticeTimer);
+  if (!box) return;
+  if (serverState === 'online') { box.classList.add('hidden'); return; }
+  const notice = serverNoticeText();
+  box.className = notice.warn ? 'server-notice' : 'server-notice is-wait';
+  box.innerHTML = (notice.warn ? NOTICE_WARNING : NOTICE_SPINNER) + '<div><b></b><p></p></div>';
+  box.querySelector('b').textContent = notice.title;
+  box.querySelector('p').textContent = notice.text;
+}
+
+function setServerState(state) {
+  serverState = state;
+  clearTimeout(noticeTimer);
+  clearTimeout(slowTimer);
+  if (state === 'online') {
+    wasOnline = true;
+    const error = $('lobbyError');
+    if (Object.values(CONNECTION_ERRORS).includes(error.textContent)) error.textContent = '';
+  }
+  if (state === 'connecting' || state === 'offline') {
+    waitingSince = Date.now();
+    slowTimer = setTimeout(renderServerNotice, SLOW_AFTER + 50);
+  }
+  // Обычное подключение занимает доли секунды — не мигаем сообщением без необходимости
+  if (state === 'connecting') noticeTimer = setTimeout(renderServerNotice, 1200);
+  else renderServerNotice();
+}
+
+// Перед созданием комнаты и входом в неё проверяем, что сервер на связи
+function serverReady() {
+  if (socket.connected) return true;
+  renderServerNotice();
+  $('lobbyError').textContent = serverState === 'noserver' ? CONNECTION_ERRORS.noserver : CONNECTION_ERRORS.wait;
+  return false;
+}
+
+socket.on('connect', () => setServerState('online'));
+socket.on('disconnect', () => { if (serverState !== 'noserver') setServerState('offline'); });
+socket.on('connect_error', (err) => {
+  // Ответ 404 на первое же подключение: по этому адресу нет сервера Socket.IO —
+  // так отвечает статический хостинг. Повторять попытки бессмысленно.
+  const status = err && (typeof err.description === 'number' ? err.description : err.context && err.context.status);
+  if (status === 404 && !wasOnline) {
+    setServerState('noserver');
+    socket.disconnect();
+    return;
+  }
+  if (serverState === 'connecting') renderServerNotice();
+  if (!appEl.classList.contains('hidden')) toast('Нет соединения с сервером. Проверьте интернет');
+});
+
+setServerState(SOCKET_LIB_LOADED && !OPENED_WITHOUT_SERVER ? 'connecting' : 'noserver');
+
 // ===== Вход / создание комнаты =====
 function enterRoom() {
   myName = nameInput.value.trim() || 'Участник';
@@ -584,6 +690,7 @@ function enterRoom() {
   setTimeout(() => { if (!currentVideo) pulsePasteBox(); }, 900);
 }
 $('createBtn').addEventListener('click', () => {
+  if (!serverReady()) return;
   myName = nameInput.value.trim() || 'Участник';
   store.set('wp_name', myName);
   socket.emit('create_room', { name: myName, color: myColor });
@@ -591,6 +698,7 @@ $('createBtn').addEventListener('click', () => {
 $('joinBtn').addEventListener('click', () => {
   const code = roomInput.value.trim().toUpperCase();
   if (code.length < 4) { $('lobbyError').textContent = 'Введите код комнаты (6 символов)'; return; }
+  if (!serverReady()) return;
   myName = nameInput.value.trim() || 'Участник';
   store.set('wp_name', myName);
   $('lobbyError').textContent = '';
@@ -606,8 +714,6 @@ socket.on('app_error', (e) => {
   if (appEl.classList.contains('hidden')) $('lobbyError').textContent = message;
   else toast(message);
 });
-// Системные ошибки соединения
-socket.on('connect_error', () => toast('Нет соединения с сервером. Проверьте интернет'));
 socket.on('reconnect', () => {
   if (!roomId) return;
   socket.emit('join_room', { roomId, name: myName, color: myColor });

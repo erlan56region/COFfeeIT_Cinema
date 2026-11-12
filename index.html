@@ -39,6 +39,8 @@
       </div>
 
       <div class="form-block">
+        <div id="serverNotice" class="server-notice hidden" role="status" aria-live="polite"></div>
+
         <label class="field-label" for="nameInput">Ваше имя</label>
         <input id="nameInput" class="input" type="text" placeholder="Например, Анна" maxlength="24" autocomplete="name">
 
@@ -331,7 +333,10 @@
 
 <div id="toast" class="toast hidden"></div>
 
-<script src="/socket.io/socket.io.js"></script>
+<!-- Клиент Socket.IO лежит рядом с сайтом (vendor/), а не берётся с сервера по пути /socket.io/…:
+     так страница работает и на GitHub Pages, где Node-сервера нет. Адрес сервера — в config.js. -->
+<script src="vendor/socket.io.min.js"></script>
+<script src="config.js"></script>
 <script src="https://www.youtube.com/iframe_api"></script>
 <script src="https://player.vimeo.com/api/player.js"></script>
 <script src="app.js"></script>

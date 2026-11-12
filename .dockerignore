@@ -1,0 +1,13 @@
+# Кэш и зависимости
+node_modules
+npm-debug.log*
+.env
+.env.*
+*.log
+
+# Не нужны для работы приложения
+README.md
+LICENSE
+.gitignore
+render.yaml
+Procfile
