@@ -54,6 +54,13 @@
           <button type="button" class="color-dot" data-color="#64748b" style="background:#64748b" aria-label="Серый"></button>
         </div>
 
+        <div id="catalogPick" class="catalog-pick hidden" role="status">
+          <span>После создания комнаты включится: <b id="catalogPickTitle"></b></span>
+          <button type="button" id="catalogPickClear" aria-label="Не включать фильм" title="Не включать фильм">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
         <button id="createBtn" class="btn btn-primary btn-big">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
           Создать комнату
@@ -121,6 +128,9 @@
       </figure>
     </div>
   </div>
+
+  <!-- Каталог фильмов: список берётся из catalog.js, карточки создаёт app.js -->
+  <section id="lobbyCatalog" class="catalog hidden" aria-label="Каталог фильмов"></section>
 </div>
 
 <!-- ===== ГЛАВНЫЙ ЭКРАН ===== -->
@@ -191,6 +201,7 @@
         <button class="quick-btn" data-url="https://www.youtube.com/watch?v=dQw4w9WgXcQ">YouTube — пример</button>
         <button class="quick-btn" data-url="https://media.w3.org/2010/05/sintel/trailer.mp4">Sintel — трейлер (MP4)</button>
         <button class="quick-btn" data-url="https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4">Big Buck Bunny (MP4)</button>
+        <button class="quick-link hidden" id="catalogJump" type="button">Фильмы из каталога</button>
       </div>
 
       <div class="player-wrap" id="playerWrap">
@@ -295,6 +306,9 @@
     </aside>
   </main>
 
+  <!-- Каталог фильмов: список берётся из catalog.js, карточки создаёт app.js -->
+  <section id="roomCatalog" class="catalog hidden" aria-label="Каталог фильмов"></section>
+
   <footer class="app-foot">
     <div class="foot-strip" aria-hidden="true">
       <img src="images/hero.jpg" alt="">
@@ -324,6 +338,7 @@
         <li>Пауза и перемотка общие для всех участников</li>
         <li>Чат находится справа (на мобильных — вкладка под плеером)</li>
         <li>Кнопка «В очередь» добавляет видео для последующего просмотра</li>
+        <li id="helpCatalog" class="hidden">Фильм можно выбрать в разделе «Фильмы» под плеером</li>
         <li>Можно вставить ссылку на любой сайт: её увидят все участники и откроют у себя в браузере</li>
         <li>Работает на телефоне, планшете и компьютере</li>
       </ul>
@@ -332,12 +347,35 @@
   </div>
 </div>
 
+<!-- ===== ФИЛЬМ ИЗ КАТАЛОГА ===== -->
+<div id="filmModal" class="film-modal hidden" role="dialog" aria-modal="true" aria-labelledby="filmTitle">
+  <div class="film-dialog">
+    <button class="film-close" id="filmClose" type="button" aria-label="Закрыть">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+    <div id="filmPoster"></div>
+    <div class="film-dialog-body">
+      <h2 id="filmTitle"></h2>
+      <p id="filmMeta" class="film-dialog-meta"></p>
+      <p id="filmDesc" class="film-dialog-desc"></p>
+      <div id="filmLinks" class="film-links hidden" role="radiogroup" aria-label="Что включить"></div>
+      <div class="film-actions">
+        <button id="filmWatch" class="btn btn-primary" type="button">Смотреть вместе</button>
+        <button id="filmQueue" class="btn btn-secondary" type="button">В очередь</button>
+      </div>
+      <p id="filmNote" class="film-note"></p>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast hidden"></div>
 
 <!-- Все библиотеки лежат рядом с сайтом (vendor/), поэтому страница работает и на GitHub Pages.
-     config.js задаёт режим: без сервера (p2p.js, участники соединяются напрямую) или со своим сервером (Socket.IO). -->
+     config.js задаёт режим: без сервера (p2p.js, участники соединяются напрямую) или со своим сервером (Socket.IO).
+     catalog.js — список фильмов для раздела «Фильмы». -->
 <script src="vendor/socket.io.min.js"></script>
 <script src="config.js"></script>
+<script src="catalog.js"></script>
 <script src="p2p.js"></script>
 <script src="https://www.youtube.com/iframe_api"></script>
 <script src="https://player.vimeo.com/api/player.js"></script>

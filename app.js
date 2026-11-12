@@ -2018,3 +2018,313 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeHelp(
 function welcomeMessage() {
   setTimeout(() => addSystem('Добро пожаловать. Вставьте ссылку выше, чтобы начать просмотр'), 700);
 }
+
+// ===== Каталог фильмов =====
+// Список фильмов задаётся в файле catalog.js (window.SYNCWATCH_CATALOG). Здесь он проверяется и показывается
+// двумя одинаковыми разделами: на экране входа и в комнате. Сами фильмы на сайте не хранятся: в комнату
+// фильм попадает так же, как ссылка из поля ввода, — событиями set_video и queue_add.
+const CATALOG_PAGE = 24;         // столько карточек показываем сразу, остальные — по кнопке «Показать ещё»
+const CATALOG_SEARCH_FROM = 9;   // поиск появляется, когда фильмов не меньше
+const CATALOG_MAX = 500;
+const SOURCE_NAMES = { youtube: 'YouTube', vimeo: 'Vimeo', rutube: 'Rutube', vk: 'VK Видео', direct: 'Видеофайл' };
+
+function catalogText(value, max) {
+  if (typeof value !== 'string' && typeof value !== 'number') return '';
+  return String(value).replace(/\s+/g, ' ').trim().slice(0, max);
+}
+// Для поиска: без различия больших и малых букв, «ё» и «е»
+function catalogKey(text) {
+  return String(text).toLowerCase().replace(/ё/g, 'е');
+}
+function catalogNode(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+// Картинка фильма: адрес в интернете или файл рядом с сайтом (images/film.jpg)
+function catalogPoster(value) {
+  const src = catalogText(value, 500);
+  if (!src) return '';
+  if (/^https?:\/\//i.test(src)) return parseHttpUrl(src) ? src : '';
+  return /[:\\]/.test(src) || src.startsWith('/') ? '' : src;
+}
+
+// Ссылки фильма: каждая проходит ту же проверку, что и ссылка из поля ввода
+function catalogLinks(film) {
+  const list = Array.isArray(film.links) ? film.links : [film.url];
+  const links = [];
+  for (const item of list) {
+    const given = item && typeof item === 'object' ? item : { url: item };
+    let url = catalogText(given.url, 2000);
+    if (url && !/^[a-z][a-z0-9+.-]*:\/\//i.test(url) && BARE_ADDRESS.test(url)) url = 'https://' + url;
+    const video = url ? detectVideo(url) : null;
+    if (!video) continue;
+    // source — где идёт видео; label — подпись на кнопке выбора
+    const source = video.type === 'link' ? siteName(video.url) : SOURCE_NAMES[video.type];
+    const name = catalogText(given.name, 40);
+    const label = !name ? source : catalogKey(name).includes(catalogKey(source)) ? name : `${name} · ${source}`;
+    links.push({ video, source, name, label });
+    if (links.length === 12) break;
+  }
+  return links;
+}
+
+function readCatalog() {
+  const list = Array.isArray(window.SYNCWATCH_CATALOG) ? window.SYNCWATCH_CATALOG : [];
+  const films = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const title = catalogText(item.title, 120);
+    const links = catalogLinks(item);
+    if (!title || !links.length) continue;   // без названия или без рабочей ссылки фильм не показываем
+    const year = catalogText(item.year, 9);
+    const genre = catalogText(item.genre, 60);
+    const director = catalogText(item.director, 120);
+    const description = catalogText(item.description, 1200);
+    // у ссылок YouTube картинка есть у самого YouTube
+    const youtube = links.find((l) => l.video.type === 'youtube' && /^[\w-]{6,20}$/.test(l.video.id || ''));
+    films.push({
+      title, director, description, links,
+      meta: [year, genre].filter(Boolean).join(' · '),
+      poster: catalogPoster(item.poster) || (youtube ? `https://i.ytimg.com/vi/${youtube.video.id}/hqdefault.jpg` : ''),
+      sources: [...new Set(links.map((l) => l.source))],
+      search: catalogKey([title, year, genre, director, description].join(' '))
+    });
+    if (films.length === CATALOG_MAX) break;
+  }
+  return films;
+}
+
+// Картинка фильма. Под ней всегда лежит название: оно видно, пока картинка загружается,
+// и остаётся, если картинки нет или она не загрузилась
+function catalogPosterNode(film, className) {
+  const box = catalogNode('span', className);
+  box.appendChild(catalogNode('span', 'film-poster-title', film.title));
+  if (!film.poster) { box.classList.add('no-image'); return box; }
+  const img = document.createElement('img');
+  img.alt = '';
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.referrerPolicy = 'no-referrer';   // сайту с картинкой незачем знать адрес страницы
+  img.addEventListener('load', () => box.classList.add('has-image'), { once: true });
+  img.addEventListener('error', () => { img.remove(); box.classList.add('no-image'); }, { once: true });
+  img.src = film.poster;
+  box.appendChild(img);
+  return box;
+}
+
+function catalogCard(film) {
+  const card = catalogNode('button', 'film-card');
+  card.type = 'button';
+  card.setAttribute('aria-label', film.meta ? `${film.title}, ${film.meta}` : film.title);
+  card.appendChild(catalogPosterNode(film, 'film-poster'));
+  const body = catalogNode('span', 'film-body');
+  body.appendChild(catalogNode('b', 'film-title', film.title));
+  if (film.meta) body.appendChild(catalogNode('span', 'film-meta', film.meta));
+  if (film.description) body.appendChild(catalogNode('span', 'film-desc', film.description));
+  body.appendChild(catalogNode('span', 'film-sources', film.sources.slice(0, 3).join(' · ')));
+  card.appendChild(body);
+  card.addEventListener('click', () => openFilm(film, card));
+  return card;
+}
+
+const catalogFilms = readCatalog();
+
+// Раздел каталога: заголовок, поиск, карточки, «Показать ещё»
+function setupCatalog(section, inRoomView) {
+  if (!section || !catalogFilms.length) return;   // каталога нет — раздел остаётся скрытым
+  const head = catalogNode('div', 'catalog-head');
+  const titles = catalogNode('div', 'catalog-titles');
+  titles.appendChild(catalogNode('h2', '', 'Фильмы'));
+  titles.appendChild(catalogNode('p', '', inRoomView
+    ? 'Выберите фильм — он включится у всех участников комнаты.'
+    : 'Выберите фильм, создайте комнату и смотрите его вместе с друзьями.'));
+  head.appendChild(titles);
+  const grid = catalogNode('div', 'catalog-grid');
+  const empty = catalogNode('p', 'catalog-empty hidden', 'Ничего не найдено. Попробуйте другое слово.');
+  const more = catalogNode('button', 'btn btn-secondary catalog-more hidden', 'Показать ещё');
+  more.type = 'button';
+  let words = [];
+  let shown = CATALOG_PAGE;
+  const render = () => {
+    const found = words.length ? catalogFilms.filter((film) => words.every((word) => film.search.includes(word))) : catalogFilms;
+    grid.textContent = '';
+    found.slice(0, shown).forEach((film) => grid.appendChild(catalogCard(film)));
+    empty.classList.toggle('hidden', found.length > 0);
+    more.classList.toggle('hidden', found.length <= shown);
+  };
+  if (catalogFilms.length >= CATALOG_SEARCH_FROM) {
+    const search = catalogNode('input', 'input catalog-search');
+    search.type = 'search';
+    search.placeholder = 'Найти фильм';
+    search.autocomplete = 'off';
+    search.setAttribute('aria-label', 'Найти фильм в каталоге');
+    search.addEventListener('input', () => {
+      words = catalogKey(search.value).split(/\s+/).filter(Boolean);
+      shown = CATALOG_PAGE;
+      render();
+    });
+    head.appendChild(search);
+  }
+  more.addEventListener('click', () => { shown += CATALOG_PAGE; render(); });
+  section.append(head, grid, empty, more);
+  render();
+  section.classList.remove('hidden');
+}
+
+// --- Окно фильма ---
+let filmOpen = null;      // { film, link, opener } — фильм в открытом окне и выбранная ссылка
+let catalogPick = null;   // фильм, выбранный на экране входа: включится, когда комната будет создана
+
+const inRoomNow = () => !appEl.classList.contains('hidden');
+
+function openFilm(film, opener) {
+  // если у фильма есть ссылка на площадке, которую зритель выбирал в прошлый раз, предлагаем её
+  const preferred = store.get('wp_catalog_source') || '';
+  const link = film.links.find((l) => l.source === preferred) || film.links[0];
+  filmOpen = { film, link, opener: opener || null };
+  $('filmTitle').textContent = film.title;
+  const meta = [film.meta, film.director ? `реж. ${film.director}` : ''].filter(Boolean).join(' · ');
+  $('filmMeta').textContent = meta;
+  $('filmMeta').classList.toggle('hidden', !meta);
+  $('filmDesc').textContent = film.description;
+  $('filmDesc').classList.toggle('hidden', !film.description);
+  const poster = $('filmPoster');
+  poster.textContent = '';
+  poster.appendChild(catalogPosterNode(film, 'film-poster film-poster-big'));
+  renderFilmLinks();
+  const room = inRoomNow();
+  $('filmWatch').textContent = room ? 'Смотреть вместе' : 'Создать комнату и смотреть';
+  $('filmQueue').classList.toggle('hidden', !room);
+  $('filmModal').classList.remove('hidden');
+  $('filmWatch').focus();
+}
+
+function renderFilmLinks() {
+  const { film, link } = filmOpen;
+  const box = $('filmLinks');
+  box.textContent = '';
+  box.classList.toggle('hidden', film.links.length < 2);
+  if (film.links.length > 1) {
+    box.appendChild(catalogNode('span', 'film-links-label', 'Что включить:'));
+    film.links.forEach((item) => {
+      const button = catalogNode('button', 'film-link' + (item === link ? ' active' : ''), item.label);
+      button.type = 'button';
+      button.setAttribute('role', 'radio');
+      button.setAttribute('aria-checked', item === link ? 'true' : 'false');
+      button.addEventListener('click', () => {
+        filmOpen.link = item;
+        // выбор площадки запоминаем, только когда было из чего выбирать
+        if (film.sources.length > 1) store.set('wp_catalog_source', item.source);
+        renderFilmLinks();
+        // кнопки созданы заново: возвращаем фокус на выбранную
+        const active = box.querySelector('.film-link.active');
+        if (active) active.focus();
+      });
+      box.appendChild(button);
+    });
+  }
+  const isLink = link.video.type === 'link';
+  $('filmNote').textContent = isLink
+    ? `Это ссылка на сайт ${link.source}: участники откроют её у себя в браузере, общего плеера у неё нет.`
+    : `Источник: ${link.source}. Воспроизведение, пауза и перемотка будут общими для всех участников.`;
+}
+
+function closeFilm() {
+  if (!filmOpen) return;
+  const { opener } = filmOpen;
+  filmOpen = null;
+  $('filmModal').classList.add('hidden');
+  if (opener && opener.isConnected) opener.focus();
+}
+
+// То, что уходит в комнату: та же запись, что и у ссылки из поля ввода, но с названием фильма
+function filmVideo() {
+  const { film, link } = filmOpen;
+  // у серий и версий к названию добавляется их имя: «Жестокий романс — Серия 1»
+  const named = film.links.length > 1 && link.name && catalogKey(link.name) !== catalogKey(link.source);
+  return { url: link.video.url, type: link.video.type, title: (film.title + (named ? ` — ${link.name}` : '')).slice(0, 200) };
+}
+
+function renderCatalogPick() {
+  $('catalogPick').classList.toggle('hidden', !catalogPick);
+  $('catalogPickTitle').textContent = catalogPick ? catalogPick.film : '';
+}
+
+function watchFilm() {
+  if (!filmOpen) return;
+  const video = filmVideo();
+  if (inRoomNow()) {
+    socket.emit('set_video', video);
+    toast(video.type === 'link' ? 'Ссылка показана всем участникам' : 'Видео загружается у всех участников');
+    filmOpen.opener = null;   // после выбора показываем плеер, а не возвращаемся к карточке
+    closeFilm();
+    $('playerWrap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  // На экране входа комнаты ещё нет: запоминаем фильм и создаём комнату
+  catalogPick = { video, film: filmOpen.film.title };
+  renderCatalogPick();
+  filmOpen.opener = null;
+  closeFilm();
+  $('catalogPick').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (nameInput.value.trim()) {
+    $('createBtn').click();
+  } else {
+    toast('Введите имя и нажмите «Создать комнату» — фильм включится сразу');
+    nameInput.focus({ preventScroll: true });
+  }
+}
+
+function queueFilm() {
+  if (!filmOpen || !inRoomNow()) return;
+  const video = filmVideo();
+  socket.emit('queue_add', video);
+  toast(video.type === 'link' ? 'Ссылка добавлена в очередь' : 'Добавлено в очередь');
+  closeFilm();
+}
+
+$('filmWatch').addEventListener('click', watchFilm);
+$('filmQueue').addEventListener('click', queueFilm);
+$('filmClose').addEventListener('click', closeFilm);
+$('filmModal').addEventListener('click', (e) => { if (e.target === $('filmModal')) closeFilm(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeFilm(); });
+// Пока окно открыто, Tab ходит по его кнопкам по кругу и не уходит на страницу под ним
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab' || !filmOpen) return;
+  const buttons = [...$('filmModal').querySelectorAll('button')].filter((b) => b.getClientRects().length > 0);
+  if (!buttons.length) return;
+  const first = buttons[0];
+  const last = buttons[buttons.length - 1];
+  const current = document.activeElement;
+  if (!$('filmModal').contains(current)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+  else if (e.shiftKey && current === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && current === last) { e.preventDefault(); first.focus(); }
+});
+$('catalogPickClear').addEventListener('click', () => { catalogPick = null; renderCatalogPick(); });
+
+// Комната создана — включаем фильм, выбранный на экране входа
+socket.on('room_created', () => {
+  if (!catalogPick) return;
+  const { video } = catalogPick;
+  catalogPick = null;
+  renderCatalogPick();
+  socket.emit('set_video', video);
+});
+// Вошли в чужую комнату — выбор с экрана входа к ней не относится
+socket.on('room_joined', () => { catalogPick = null; renderCatalogPick(); });
+
+setupCatalog($('lobbyCatalog'), false);
+setupCatalog($('roomCatalog'), true);
+if (catalogFilms.length) {
+  $('catalogJump').classList.remove('hidden');
+  $('helpCatalog').classList.remove('hidden');
+  $('catalogJump').addEventListener('click', () => {
+    // шапка комнаты закреплена вверху экрана: прокручиваем так, чтобы она не закрыла заголовок раздела
+    const header = document.querySelector('.topbar');
+    const top = $('roomCatalog').getBoundingClientRect().top + window.scrollY - (header ? header.offsetHeight : 0) - 14;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  });
+}

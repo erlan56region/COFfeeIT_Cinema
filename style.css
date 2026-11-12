@@ -406,3 +406,78 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
+
+/* ============================================================
+   КАТАЛОГ ФИЛЬМОВ
+   ============================================================ */
+.catalog{max-width:1180px;width:100%;margin:56px auto 0}
+.app .catalog{max-width:1440px;margin:4px auto 0;padding:0 24px 14px}
+.catalog-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px 18px;flex-wrap:wrap;margin-bottom:18px}
+.catalog-titles h2{font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:3px}
+.catalog-titles p{color:var(--muted);font-size:14px}
+.catalog-search{max-width:280px;min-height:44px;padding:9px 14px;font-size:14.5px}
+.catalog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.catalog-empty{color:var(--muted);text-align:center;padding:26px 16px;font-size:14px}
+.catalog-more{display:flex;margin:18px auto 0}
+
+.film-card{display:flex;flex-direction:column;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease}
+.film-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:var(--line-strong)}
+.film-poster{position:relative;display:flex;align-items:center;justify-content:center;width:100%;aspect-ratio:16/9;padding:14px;background:linear-gradient(135deg,#3730a3 0%,#1e1b4b 55%,#0f172a 100%);overflow:hidden;flex-shrink:0}
+@supports not (aspect-ratio:1){.film-poster{min-height:124px}.film-poster-big{min-height:200px}}
+.film-poster img{position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:cover;opacity:0;transition:opacity .25s ease}
+.film-poster.has-image img{opacity:1}
+.film-poster-title{color:#e0e7ff;font-weight:700;font-size:15px;line-height:1.3;text-align:center;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.film-body{display:flex;flex-direction:column;gap:4px;padding:12px 14px 13px;flex:1;width:100%}
+.film-title{font-size:14.5px;font-weight:700;line-height:1.3;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.film-meta{font-size:12.5px;color:var(--muted);font-weight:500}
+.film-desc{font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:2px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.film-sources{margin-top:auto;padding-top:8px;font-size:11.5px;font-weight:600;color:var(--accent)}
+
+/* --- окно фильма --- */
+.film-modal{position:fixed;inset:0;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);z-index:210;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;overscroll-behavior:contain}
+.film-dialog{position:relative;background:#fff;border-radius:18px;max-width:560px;width:100%;box-shadow:var(--shadow-lg);animation:cardIn .3s ease;margin:auto;overflow:hidden}
+.film-close{position:absolute;top:12px;right:12px;z-index:2;width:38px;height:38px;border-radius:11px;background:rgba(15,23,42,.62);color:#fff;display:flex;align-items:center;justify-content:center}
+.film-close:hover{background:rgba(15,23,42,.82)}
+.film-close:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.film-poster-big .film-poster-title{font-size:20px}
+.film-dialog-body{padding:18px 22px 20px}
+.film-dialog h2{font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.25;margin-bottom:4px}
+.film-dialog-meta{color:var(--muted);font-size:13px;font-weight:500;margin-bottom:10px}
+.film-dialog-desc{font-size:14px;line-height:1.6;color:#334155;margin-bottom:14px}
+.film-links{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px}
+.film-links-label{width:100%;font-size:13px;color:var(--muted);font-weight:500}
+.film-link{min-height:40px;padding:8px 14px;border-radius:99px;border:1px solid var(--line-strong);background:var(--surface);font-size:13.5px;font-weight:600;color:var(--ink);transition:.15s}
+.film-link:hover{border-color:var(--accent)}
+.film-link.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.film-actions{display:flex;gap:10px;flex-wrap:wrap}
+.film-actions .btn{flex:1 1 180px}
+.film-note{margin-top:10px;font-size:12.5px;color:var(--muted);line-height:1.5}
+
+/* --- фильм, выбранный на экране входа, и кнопка каталога в комнате --- */
+.catalog-pick{display:flex;align-items:center;gap:8px;background:var(--accent-soft);border:1px solid #c7d2fe;color:#3730a3;border-radius:10px;padding:7px 7px 7px 12px;font-size:13px;line-height:1.4;margin-bottom:12px}
+.catalog-pick span{flex:1;min-width:0}
+.catalog-pick b{font-weight:700}
+.catalog-pick button{width:32px;height:32px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#4338ca}
+.catalog-pick button:hover{background:rgba(79,70,229,.12)}
+.quick-link{background:var(--accent-soft);border:1px solid #c7d2fe;padding:9px 14px;border-radius:99px;font-size:13px;font-weight:600;transition:.15s;min-height:40px;color:var(--accent)}
+.quick-link:hover{border-color:var(--accent)}
+
+@media(max-width:1100px){.app .catalog{padding:0 18px 12px}}
+@media(max-width:900px){.app .catalog{padding:0 16px 12px;margin-top:14px}}
+@media(max-width:640px){
+  .catalog{margin-top:36px}
+  .app .catalog{padding:0 14px 10px}
+  .catalog-head{margin-bottom:14px}
+  .catalog-titles h2{font-size:19px}
+  .catalog-search{max-width:none}
+  .catalog-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .film-body{padding:9px 10px 11px}
+  .film-title{font-size:13px}
+  .film-desc{display:none}
+  .film-poster-title{font-size:12.5px}
+  .film-poster-big .film-poster-title{font-size:17px}
+  .film-dialog-body{padding:16px 16px 18px}
+  .film-actions .btn{flex:1 1 100%}
+  .quick-link{flex:1 1 100%;text-align:center}
+}
+@media(max-width:330px){.catalog-grid{grid-template-columns:1fr}}
