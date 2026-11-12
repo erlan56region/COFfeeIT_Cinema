@@ -333,10 +333,11 @@
 
 <div id="toast" class="toast hidden"></div>
 
-<!-- Клиент Socket.IO лежит рядом с сайтом (vendor/), а не берётся с сервера по пути /socket.io/…:
-     так страница работает и на GitHub Pages, где Node-сервера нет. Адрес сервера — в config.js. -->
+<!-- Все библиотеки лежат рядом с сайтом (vendor/), поэтому страница работает и на GitHub Pages.
+     config.js задаёт режим: без сервера (p2p.js, участники соединяются напрямую) или со своим сервером (Socket.IO). -->
 <script src="vendor/socket.io.min.js"></script>
 <script src="config.js"></script>
+<script src="p2p.js"></script>
 <script src="https://www.youtube.com/iframe_api"></script>
 <script src="https://player.vimeo.com/api/player.js"></script>
 <script src="app.js"></script>

@@ -12,13 +12,13 @@ const io = new Server(server, {
 
 // Файлы сайта лежат в корне проекта — оттуда же их раздаёт GitHub Pages.
 // Сервер отдаёт только их: server.js, package.json и прочее наружу не попадает.
-const SITE_FILES = ['index.html', 'style.css', 'app.js'];
+const SITE_FILES = ['index.html', 'style.css', 'app.js', 'p2p.js'];
 const SITE_DIRS = ['images', 'vendor'];
 
-// Сайт, открытый с самого сервера, подключается к нему же. Адрес из файла config.js
-// нужен, только когда сайт раздаётся отдельно от сервера (GitHub Pages).
+// Сайт, открытый с самого сервера, подключается к нему же — что бы ни было записано
+// в файле config.js. Тот файл нужен, когда сайт раздаётся отдельно от сервера (GitHub Pages).
 app.get('/config.js', (req, res) => {
-  res.type('application/javascript').send("window.SYNCWATCH_SERVER = '';\n");
+  res.type('application/javascript').send('window.SYNCWATCH_SERVER = window.location.origin;\n');
 });
 SITE_FILES.forEach((file) => {
   app.get(`/${file}`, (req, res) => res.sendFile(path.join(__dirname, file)));

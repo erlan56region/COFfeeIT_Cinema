@@ -83,6 +83,8 @@ img{display:block;max-width:100%}
 .join-row{display:flex;gap:10px}
 .code-input{text-transform:uppercase;letter-spacing:.3em;font-weight:700;text-align:center}
 .error{color:var(--danger);font-size:13.5px;font-weight:500;min-height:20px;margin-top:10px;text-align:center}
+.error.is-info{color:var(--muted)}
+.btn:disabled{opacity:.6;cursor:default;pointer-events:none}
 
 /* --- состояние сервера синхронизации --- */
 .server-notice{display:flex;align-items:flex-start;gap:10px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:13px;line-height:1.5}
@@ -142,6 +144,9 @@ img{display:block;max-width:100%}
 .greet-photo{width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--line)}
 .sync-pill{display:flex;align-items:center;gap:8px;background:var(--success-bg);border:1px solid var(--success-line);color:var(--success);padding:7px 13px;border-radius:99px;font-size:12.5px;font-weight:600}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--success);flex-shrink:0}
+.sync-pill.is-offline{background:#fffbeb;border-color:#fde68a;color:#b45309}
+.sync-pill.is-offline .sync-dot{background:#d97706;animation:sync-blink 1s ease-in-out infinite}
+@keyframes sync-blink{50%{opacity:.25}}
 .room-chip{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line-strong);padding:8px 14px;border-radius:10px;font-size:13.5px;font-weight:500;color:var(--muted);transition:.15s;min-height:42px}
 .room-chip:hover{border-color:var(--accent);color:var(--ink)}
 .room-chip b{letter-spacing:.12em;color:var(--ink);font-weight:700}
