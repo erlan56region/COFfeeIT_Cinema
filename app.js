@@ -1,18 +1,19 @@
 /* ===== SyncWatch — клиент ===== */
 
-// Адрес сервера синхронизации задаётся в config.js.
-// Пустая строка — сервер находится там же, откуда открыт сайт (обычный запуск через Node.js).
+// Сайт работает в одном из двух режимов (см. config.js):
+//  - адрес сервера не задан — режим без сервера: участники соединяются напрямую (p2p.js);
+//  - адрес сервера задан — комнаты ведёт server.js, связь через Socket.IO.
+// Сайт, открытый с самого server.js, получает его адрес автоматически.
 const SERVER_URL = String(window.SYNCWATCH_SERVER || '').trim().replace(/\/+$/, '');
-// Адрес сервера не задан, а страница открыта оттуда, где сервера заведомо нет:
-// как файл с диска или с GitHub Pages (*.github.io раздаёт только статические файлы)
-const OPENED_WITHOUT_SERVER = !SERVER_URL
-  && (location.protocol === 'file:' || /\.github\.io$/i.test(location.hostname));
-// Клиент Socket.IO лежит в vendor/. Если он не загрузился, интерфейс всё равно должен открыться
-const SOCKET_LIB_LOADED = typeof io === 'function';
+const P2P_MODE = !SERVER_URL;
+// Библиотеки лежат рядом с сайтом. Если нужная не загрузилась, интерфейс всё равно должен открыться
+const TRANSPORT_LOADED = P2P_MODE ? !!(window.SyncP2P && window.SyncP2P.createSocket) : typeof io === 'function';
 
-const socket = SOCKET_LIB_LOADED
-  ? io(SERVER_URL || undefined, { autoConnect: !OPENED_WITHOUT_SERVER })
-  : { connected: false, on() {}, emit() {}, disconnect() {} };
+const socket = !TRANSPORT_LOADED
+  ? { connected: false, on() {}, emit() {}, disconnect() {} }
+  : P2P_MODE
+    ? window.SyncP2P.createSocket({ peer: window.SYNCWATCH_PEER || undefined })
+    : io(SERVER_URL);
 
 // Безопасное хранилище: в песочнице/приватном режиме localStorage может быть недоступен
 const store = (() => {
@@ -187,9 +188,24 @@ function getDuration() {
 let vimeoDuration = 0;
 const ICON_PLAY = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5Z"/></svg>';
 const ICON_PAUSE = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+// Перемотка, которую выполнил сам сайт: своя кнопка или команда от другого участника.
+// Плеер сообщает о ней событием seeked. Такое событие дальше не рассылаем — иначе участники
+// без конца пересылали бы друг другу одну и ту же перемотку.
+let ownSeek = null;
+function markOwnSeek(time) {
+  if (typeof time !== 'number') return;
+  const d = getDuration();
+  ownSeek = { time: d > 0 ? Math.min(time, d) : time, at: Date.now() };
+}
+function isOwnSeek(position) {
+  if (!ownSeek) return false;
+  const age = Date.now() - ownSeek.at;
+  return age < 1000 || (age < 30000 && Math.abs(position - ownSeek.time) < 1.5);
+}
 function doPlay(time) {
   if (!currentVideo) return;
   suppressEvents = true;
+  markOwnSeek(time);
   if (currentVideo.type === 'youtube' && ytPlayer && ytReady) {
     if (typeof time === 'number') ytPlayer.seekTo(time, true);
     ytPlayer.playVideo();
@@ -207,6 +223,7 @@ function doPlay(time) {
 function doPause(time) {
   if (!currentVideo) return;
   suppressEvents = true;
+  markOwnSeek(time);
   if (currentVideo.type === 'youtube' && ytPlayer && ytReady) {
     if (typeof time === 'number') ytPlayer.seekTo(time, true);
     ytPlayer.pauseVideo();
@@ -222,7 +239,8 @@ function doPause(time) {
   setTimeout(() => suppressEvents = false, 300);
 }
 function doSeek(time) {
-  if (!currentVideo) return;
+  if (!currentVideo || typeof time !== 'number' || !Number.isFinite(time)) return;
+  markOwnSeek(time);
   if (currentVideo.type === 'youtube' && ytPlayer && ytReady) ytPlayer.seekTo(time, true);
   else if (currentVideo.type === 'vimeo' && vimeoPlayer) vimeoPlayer.setCurrentTime(time).catch(()=>{});
   else if (currentVideo.type === 'direct') htmlVideo.currentTime = time;
@@ -392,7 +410,7 @@ function createVimeoPlayer(id) {
     });
     vimeoPlayer.on('seeked', (data) => {
       vimeoTime = (data && data.seconds) || vimeoTime;
-      if (suppressEvents) return;
+      if (suppressEvents || isOwnSeek(vimeoTime)) return;
       socket.emit('seek', { time: vimeoTime });
     });
     vimeoPlayer.on('error', () => {
@@ -467,7 +485,7 @@ htmlVideo.addEventListener('pause', () => {
 htmlVideo.addEventListener('loadedmetadata', () => { hideFallback(); duration = htmlVideo.duration || 0; });
 htmlVideo.addEventListener('ended', () => { isPlaying = false; updatePlayBtn(); socket.emit('queue_next'); });
 htmlVideo.addEventListener('seeked', () => {
-  if (suppressEvents) return;
+  if (suppressEvents || isOwnSeek(htmlVideo.currentTime)) return;
   socket.emit('seek', { time: htmlVideo.currentTime });
 });
 htmlVideo.addEventListener('error', () => {
@@ -583,42 +601,45 @@ setInterval(() => {
 
 setInterval(() => { if (roomId) socket.emit('sync_request'); }, 15000);
 
-// ===== Соединение с сервером =====
-// Сайт может открываться отдельно от сервера (например, с GitHub Pages), поэтому на экране входа
-// показываем состояние связи: connecting — подключаемся, online — на связи,
-// offline — связь пропала, noserver — по этому адресу сервера нет.
-const SLOW_AFTER = 75000; // «спящий» сервер просыпается примерно за минуту; если дольше — это уже неполадка
+// ===== Соединение =====
+// На экране входа показываем состояние связи: connecting — подключаемся, online — на связи,
+// offline — связь пропала, failed — подключиться нельзя (причина в connectionProblem).
+const SLOW_AFTER = P2P_MODE ? 12000 : 75000; // «спящий» сервер просыпается примерно за минуту; если дольше — это уже неполадка
 let serverState = 'connecting';
+let connectionProblem = null;   // noserver | lib | unsupported
 let wasOnline = false;
 let waitingSince = Date.now();
 let noticeTimer = null;
 let slowTimer = null;
 
 const CONNECTION_ERRORS = {
-  noserver: 'Сервер синхронизации не подключён — комнаты пока недоступны',
-  wait: 'Нет связи с сервером. Подождите несколько секунд и попробуйте ещё раз'
+  failed: 'Сейчас создать комнату или войти в неё нельзя — причина указана выше',
+  wait: 'Связь ещё не установлена. Подождите несколько секунд и попробуйте ещё раз'
 };
+const CHECK_LINK = { href: 'check.html', text: 'Проверить связь' };
 const NOTICE_SPINNER = '<span class="spin" aria-hidden="true"></span>';
 const NOTICE_WARNING = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 2.5 20h19L12 3.5Z"/><path d="M12 10v4.5M12 17.3h.01"/></svg>';
 
 function serverNoticeText() {
-  if (!SOCKET_LIB_LOADED) {
-    return { warn: true, title: 'Сайт загрузился не полностью', text: 'Не найден файл vendor/socket.io.min.js. Проверьте, что папка vendor загружена вместе с остальными файлами сайта.' };
+  if (!TRANSPORT_LOADED || connectionProblem === 'lib') {
+    const file = P2P_MODE ? (TRANSPORT_LOADED ? 'vendor/peerjs.min.js' : 'p2p.js') : 'vendor/socket.io.min.js';
+    return { warn: true, title: 'Сайт загрузился не полностью', text: `Не найден файл ${file}. Проверьте, что все файлы и папка vendor загружены вместе с сайтом.` };
   }
-  if (serverState === 'noserver') {
-    return SERVER_URL
-      ? { warn: true, title: 'Сервер синхронизации не найден', text: `По адресу ${SERVER_URL} нет сервера SyncWatch. Проверьте адрес в файле config.js.` }
-      : { warn: true, title: 'Сервер синхронизации не подключён', text: 'Страница открыта без серверной части, поэтому создать комнату или войти в неё пока нельзя. Владельцу сайта: разверните server.js и укажите его адрес в файле config.js — инструкция в README.' };
+  if (connectionProblem === 'unsupported') {
+    return { warn: true, title: 'Браузер не поддерживает соединение', text: 'Для совместного просмотра нужен современный браузер: Chrome, Яндекс Браузер, Firefox, Safari или Edge. Если сайт открыт внутри другого приложения, откройте ссылку в обычном браузере.' };
+  }
+  if (connectionProblem === 'noserver') {
+    return { warn: true, title: 'Сервер синхронизации не найден', text: `По адресу ${SERVER_URL} нет сервера SyncWatch. Проверьте адрес в файле config.js.` };
   }
   if (Date.now() - waitingSince >= SLOW_AFTER) {
-    return { warn: true, title: 'Сервер не отвечает', text: SERVER_URL
-      ? `Не удаётся подключиться к ${SERVER_URL}. Попробуйте обновить страницу позже. Владельцу сайта: проверьте адрес в файле config.js и что сервер запущен.`
-      : 'Попробуйте обновить страницу чуть позже.' };
+    return P2P_MODE
+      ? { warn: true, title: 'Не удаётся установить связь', text: 'Сервис, через который участники находят друг друга, не отвечает. Проверьте интернет и обновите страницу. Если включён VPN или блокировщик, попробуйте без него.', link: CHECK_LINK }
+      : { warn: true, title: 'Сервер не отвечает', text: `Не удаётся подключиться к ${SERVER_URL}. Попробуйте обновить страницу позже. Владельцу сайта: проверьте адрес в файле config.js и что сервер запущен.` };
   }
   if (serverState === 'offline') {
-    return { warn: false, title: 'Связь с сервером потеряна', text: 'Пробуем подключиться снова…' };
+    return { warn: false, title: 'Связь потеряна', text: 'Пробуем подключиться снова…' };
   }
-  return { warn: false, title: 'Подключаемся к серверу…', text: SERVER_URL ? 'Если сервер был в режиме сна, первое подключение может занять до минуты.' : 'Обычно это занимает пару секунд.' };
+  return { warn: false, title: 'Подключаемся…', text: P2P_MODE ? 'Обычно это занимает пару секунд.' : 'Если сервер был в режиме сна, первое подключение может занять до минуты.' };
 }
 
 function renderServerNotice() {
@@ -631,10 +652,19 @@ function renderServerNotice() {
   box.innerHTML = (notice.warn ? NOTICE_WARNING : NOTICE_SPINNER) + '<div><b></b><p></p></div>';
   box.querySelector('b').textContent = notice.title;
   box.querySelector('p').textContent = notice.text;
+  if (notice.link) {
+    const link = document.createElement('a');
+    link.href = notice.link.href;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = notice.link.text;
+    box.querySelector('p').append(' ', link);
+  }
 }
 
-function setServerState(state) {
+function setServerState(state, problem) {
   serverState = state;
+  connectionProblem = state === 'failed' ? problem : null;
   clearTimeout(noticeTimer);
   clearTimeout(slowTimer);
   if (state === 'online') {
@@ -651,30 +681,57 @@ function setServerState(state) {
   else renderServerNotice();
 }
 
-// Перед созданием комнаты и входом в неё проверяем, что сервер на связи
+// Перед созданием комнаты и входом в неё проверяем, что связь есть
 function serverReady() {
   if (socket.connected) return true;
   renderServerNotice();
-  $('lobbyError').textContent = serverState === 'noserver' ? CONNECTION_ERRORS.noserver : CONNECTION_ERRORS.wait;
+  $('lobbyError').textContent = serverState === 'failed' ? CONNECTION_ERRORS.failed : CONNECTION_ERRORS.wait;
   return false;
 }
 
 socket.on('connect', () => setServerState('online'));
-socket.on('disconnect', () => { if (serverState !== 'noserver') setServerState('offline'); });
+socket.on('disconnect', () => { if (serverState !== 'failed') setServerState('offline'); });
 socket.on('connect_error', (err) => {
+  if (P2P_MODE) {
+    // p2p.js сам повторяет попытки; окончательны только эти две причины
+    if (err && (err.type === 'lib' || err.type === 'unsupported')) setServerState('failed', err.type);
+    else if (serverState === 'connecting') renderServerNotice();
+    return;
+  }
   // Ответ 404 на первое же подключение: по этому адресу нет сервера Socket.IO —
-  // так отвечает статический хостинг. Повторять попытки бессмысленно.
+  // так отвечает обычный хостинг файлов. Повторять попытки бессмысленно.
   const status = err && (typeof err.description === 'number' ? err.description : err.context && err.context.status);
   if (status === 404 && !wasOnline) {
-    setServerState('noserver');
+    setServerState('failed', 'noserver');
     socket.disconnect();
     return;
   }
   if (serverState === 'connecting') renderServerNotice();
   if (!appEl.classList.contains('hidden')) toast('Нет соединения с сервером. Проверьте интернет');
 });
+// Короткие сообщения о состоянии комнаты (режим без сервера)
+socket.on('notice', (data) => { if (data && data.text && !appEl.classList.contains('hidden')) toast(data.text); });
 
-setServerState(SOCKET_LIB_LOADED && !OPENED_WITHOUT_SERVER ? 'connecting' : 'noserver');
+if (TRANSPORT_LOADED) setServerState('connecting');
+else setServerState('failed', 'lib');
+
+// Пока идёт создание комнаты или вход, кнопки не нажимаются повторно
+let lobbyBusyTimer = null;
+function setLobbyBusy(text) {
+  const busy = !!text;
+  clearTimeout(lobbyBusyTimer);
+  $('createBtn').disabled = busy;
+  $('joinBtn').disabled = busy;
+  const error = $('lobbyError');
+  error.classList.toggle('is-info', busy);
+  if (busy) {
+    error.textContent = text;
+    lobbyBusyTimer = setTimeout(() => setLobbyBusy(''), 30000);
+  } else if (error.dataset.busy === '1') {
+    error.textContent = '';
+  }
+  error.dataset.busy = busy ? '1' : '';
+}
 
 // ===== Вход / создание комнаты =====
 function enterRoom() {
@@ -693,6 +750,7 @@ $('createBtn').addEventListener('click', () => {
   if (!serverReady()) return;
   myName = nameInput.value.trim() || 'Участник';
   store.set('wp_name', myName);
+  setLobbyBusy('Создаём комнату…');
   socket.emit('create_room', { name: myName, color: myColor });
 });
 $('joinBtn').addEventListener('click', () => {
@@ -701,17 +759,17 @@ $('joinBtn').addEventListener('click', () => {
   if (!serverReady()) return;
   myName = nameInput.value.trim() || 'Участник';
   store.set('wp_name', myName);
-  $('lobbyError').textContent = '';
+  setLobbyBusy('Ищем комнату…');
   socket.emit('join_room', { roomId: code, name: myName, color: myColor });
 });
 nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') $('createBtn').click(); });
 roomInput.addEventListener('keydown', e => { if (e.key === 'Enter') $('joinBtn').click(); });
 
-socket.on('room_created', (state) => { applyState(state); enterRoom(); welcomeMessage(); toast('Комната создана. Отправьте код участникам'); });
-socket.on('room_joined', (state) => { applyState(state); enterRoom(); welcomeMessage(); toast('Вы подключены к комнате'); });
+socket.on('room_created', (state) => { setLobbyBusy(''); applyState(state); enterRoom(); welcomeMessage(); toast('Комната создана. Отправьте код участникам'); });
+socket.on('room_joined', (state) => { setLobbyBusy(''); applyState(state); enterRoom(); welcomeMessage(); toast('Вы подключены к комнате'); });
 socket.on('app_error', (e) => {
   const message = (e && e.message) || 'Произошла ошибка';
-  if (appEl.classList.contains('hidden')) $('lobbyError').textContent = message;
+  if (appEl.classList.contains('hidden')) { setLobbyBusy(''); $('lobbyError').textContent = message; }
   else toast(message);
 });
 socket.on('reconnect', () => {
@@ -813,7 +871,7 @@ function renderUsers(users, hostId) {
     row.className = 'user-row';
     const isMe = u.id === socket.id;
     row.innerHTML = `
-      <div class="avatar" style="background:${u.color}">${escapeHtml(initialFor(u.name))}</div>
+      <div class="avatar" style="background:${escapeHtml(u.color)}">${escapeHtml(initialFor(u.name))}</div>
       <span class="u-name">${escapeHtml(u.name)}</span>
       ${u.id === hostId ? '<span class="host-tag">Организатор</span>' : ''}
       ${isMe ? '<span class="you-tag">Вы</span>' : ''}
