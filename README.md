@@ -6,6 +6,8 @@
 ![Socket.IO](https://img.shields.io/badge/Socket.IO-4.x-010101?logo=socket.io&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-4f46e5)
 
+**Сайт:** <https://erlan56region.github.io/COFfeeIT_Cinema/> — размещён на GitHub Pages. Чтобы на нём работали комнаты, нужен сервер синхронизации — см. раздел [«GitHub Pages»](#github-pages).
+
 ## Возможности
 
 - **Синхронизация просмотра** — play, pause и перемотка применяются у всех участников комнаты
@@ -22,7 +24,7 @@
 
 | Экран входа | Комната |
 |---|---|
-| `public/images/hero.jpg` | `public/images/photo-3.jpg` |
+| `images/hero.jpg` | `images/photo-3.jpg` |
 
 _(добавьте свои скриншоты в папку `docs/` и вставьте их сюда)_
 
@@ -57,16 +59,22 @@ PORT=8080 npm start
 ## Структура проекта
 
 ```
-watch-party/
-├── server.js              # Express + Socket.IO: комнаты, синхронизация, чат, очередь
+COFfeeIT_Cinema/
+├── index.html             # Сайт: экран входа и комната
+├── style.css              # Оформление и адаптивность
+├── app.js                 # Клиентская логика и плееры (YouTube / Vimeo / HTML5)
+├── config.js              # Адрес сервера синхронизации (нужен для GitHub Pages)
+├── images/                # Фотографии для оформления
+├── vendor/
+│   └── socket.io.min.js   # Клиент Socket.IO (копия из пакета socket.io)
+├── .nojekyll              # GitHub Pages раздаёт файлы как есть, без обработки Jekyll
+├── server.js              # Сервер — Express + Socket.IO: комнаты, синхронизация, чат, очередь
 ├── package.json
-├── public/
-│   ├── index.html         # Разметка: экран входа и комната
-│   ├── style.css          # Оформление и адаптивность
-│   ├── app.js             # Клиентская логика и плееры (YouTube / Vimeo / HTML5)
-│   └── images/            # Фотографии для оформления
+├── render.yaml, Procfile, Dockerfile   # Настройки для хостингов сервера
 └── README.md
 ```
+
+Файлы сайта лежат в корне репозитория, а не в отдельной папке: GitHub Pages открывает `index.html` именно из корня ветки `main`. Все пути внутри сайта относительные, поэтому он одинаково работает и по адресу `https://…github.io/COFfeeIT_Cinema/`, и при запуске через `npm start`.
 
 ## Как работает синхронизация
 
@@ -102,7 +110,35 @@ HTTP-эндпоинт `GET /api/health` возвращает `{ "ok": true, "roo
 
 ## Развёртывание
 
-Проект — обычное Node.js-приложение, подойдёт любой хостинг с поддержкой WebSocket.
+Проект состоит из двух частей:
+
+- **сайт** — статические файлы (`index.html`, `style.css`, `app.js`, `config.js`, `images/`, `vendor/`);
+- **сервер** — `server.js` (Node.js): хранит комнаты и рассылает участникам play / pause / перемотку и сообщения чата.
+
+Разместить их можно двумя способами:
+
+1. **Всё на одном Node.js-хостинге** (Render, Railway, свой VPS). Сервер сам раздаёт сайт, настраивать ничего не нужно, `config.js` менять не нужно.
+2. **Сайт на GitHub Pages, сервер — отдельно.** GitHub Pages только раздаёт файлы и не умеет запускать `server.js`, поэтому серверу нужен свой хостинг, а его адрес указывается в `config.js`.
+
+### GitHub Pages
+
+Сайт открывается по адресу <https://erlan56region.github.io/COFfeeIT_Cinema/>. В настройках репозитория (**Settings → Pages**) должно быть выбрано **Deploy from a branch**, ветка `main`, папка `/ (root)`.
+
+Пока сервер не подключён, сайт открывается, но на экране входа показывает сообщение «Сервер синхронизации не подключён», а комнаты не создаются. Чтобы всё заработало:
+
+1. Разверните сервер — например, на Render (инструкция ниже). Вы получите адрес вида `https://syncwatch-xxxx.onrender.com`.
+2. Откройте в репозитории файл [`config.js`](config.js), нажмите на карандаш (**Edit this file**) и впишите этот адрес в последнюю строку:
+
+   ```js
+   window.SYNCWATCH_SERVER = 'https://syncwatch-xxxx.onrender.com';
+   ```
+
+   Адрес должен начинаться с `https://`.
+3. Сохраните изменение в ветку `main` (**Commit changes**). Через одну-две минуты GitHub Pages опубликует его — обновите страницу сайта.
+
+Проверить, что сервер запущен, можно, открыв в браузере `https://ВАШ-АДРЕС/api/health` — придёт ответ вида `{"ok":true,"rooms":0}`.
+
+> На бесплатном тарифе Render сервер «засыпает» после 15 минут без посетителей и просыпается примерно за минуту. В это время сайт показывает «Подключаемся к серверу…» и подключается сам, как только сервер ответит.
 
 ### Render
 
@@ -119,8 +155,8 @@ HTTP-эндпоинт `GET /api/health` возвращает `{ "ok": true, "roo
 ### Свой VPS
 
 ```bash
-git clone https://github.com/ВАШ_ЛОГИН/watch-party.git
-cd watch-party
+git clone https://github.com/erlan56region/COFfeeIT_Cinema.git
+cd COFfeeIT_Cinema
 npm install --omit=dev
 PORT=3000 node server.js
 ```
@@ -137,11 +173,13 @@ git init
 git add .
 git commit -m "SyncWatch: совместный просмотр видео"
 git branch -M main
-git remote add origin https://github.com/ВАШ_ЛОГИН/watch-party.git
+git remote add origin https://github.com/ВАШ_ЛОГИН/COFfeeIT_Cinema.git
 git push -u origin main
 ```
 
 `node_modules` в репозиторий не попадает — это уже указано в `.gitignore`.
+
+При загрузке через сайт GitHub (**Add file → Upload files**) кладите файлы и папки в корень репозитория, сохраняя структуру из раздела [«Структура проекта»](#структура-проекта): `index.html` должен оказаться в корне, иначе GitHub Pages покажет вместо сайта этот README.
 
 ## Известные ограничения
 
