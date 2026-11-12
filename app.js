@@ -195,13 +195,37 @@ let ownSeek = null;
 function markOwnSeek(time) {
   if (typeof time !== 'number') return;
   const d = getDuration();
-  ownSeek = { time: d > 0 ? Math.min(time, d) : time, at: Date.now() };
+  ownSeek = { time: d > 0 ? Math.min(time, d) : time, at: Date.now(), seen: false };
 }
 function isOwnSeek(position) {
   if (!ownSeek) return false;
   const age = Date.now() - ownSeek.at;
-  return age < 1000 || (age < 30000 && Math.abs(position - ownSeek.time) < 1.5);
+  const near = Math.abs(position - ownSeek.time) < 1.5;
+  if (age < 1000) { if (near) ownSeek.seen = true; return true; }
+  // При медленной сети плеер перематывает дольше секунды: его запоздавшее событие пропускаем один раз.
+  // Следующая перемотка в то же место — уже действие самого зрителя, её рассылаем.
+  const late = !ownSeek.seen && age < 30000 && near;
+  ownSeek = null;
+  return late;
 }
+// Пока страница «спит» (свёрнутый браузер на телефоне, сон ноутбука), её таймеры стоят, а видео браузер
+// ставит на паузу сам. Проснувшись, плеер сообщает об этой паузе — с позицией, на которой страница уснула.
+// Зритель ничего не нажимал, поэтому такие события не рассылаем: иначе просмотр у всех отбросило бы назад.
+// Вместо этого запрашиваем текущее состояние комнаты и догоняем остальных.
+const WAKE_GAP = 5000;    // ежесекундный таймер молчал дольше — страница спала
+const WAKE_QUIET = 2500;  // столько после пробуждения события плеера не рассылаются
+let lastTick = Date.now();
+let wokeAt = 0;
+function justWoke() {
+  const now = Date.now();
+  if (now - lastTick > WAKE_GAP) {
+    wokeAt = now;
+    setTimeout(() => { if (roomId) socket.emit('sync_request'); }, 1200);
+  }
+  lastTick = now;
+  return now - wokeAt < WAKE_QUIET;
+}
+setInterval(justWoke, 1000);
 function doPlay(time) {
   if (!currentVideo) return;
   suppressEvents = true;
@@ -397,12 +421,12 @@ function createVimeoPlayer(id) {
     vimeoPlayer.on('play', () => {
       if (suppressEvents) return;
       isPlaying = true; updatePlayBtn();
-      socket.emit('play', { time: vimeoTime });
+      if (!justWoke()) socket.emit('play', { time: vimeoTime });
     });
     vimeoPlayer.on('pause', () => {
       if (suppressEvents) return;
       isPlaying = false; updatePlayBtn();
-      socket.emit('pause', { time: vimeoTime });
+      if (!justWoke()) socket.emit('pause', { time: vimeoTime });
     });
     vimeoPlayer.on('ended', () => {
       isPlaying = false; updatePlayBtn();
@@ -410,7 +434,7 @@ function createVimeoPlayer(id) {
     });
     vimeoPlayer.on('seeked', (data) => {
       vimeoTime = (data && data.seconds) || vimeoTime;
-      if (suppressEvents || isOwnSeek(vimeoTime)) return;
+      if (suppressEvents || isOwnSeek(vimeoTime) || justWoke()) return;
       socket.emit('seek', { time: vimeoTime });
     });
     vimeoPlayer.on('error', () => {
@@ -445,10 +469,10 @@ function createYTPlayer(videoId) {
           if (suppressEvents) return;
           if (e.data === YT.PlayerState.PLAYING) {
             isPlaying = true; updatePlayBtn();
-            socket.emit('play', { time: getTime() });
+            if (!justWoke()) socket.emit('play', { time: getTime() });
           } else if (e.data === YT.PlayerState.PAUSED) {
             isPlaying = false; updatePlayBtn();
-            socket.emit('pause', { time: getTime() });
+            if (!justWoke()) socket.emit('pause', { time: getTime() });
           } else if (e.data === YT.PlayerState.ENDED) {
             isPlaying = false; updatePlayBtn();
             socket.emit('queue_next');
@@ -475,17 +499,17 @@ window.onYouTubeIframeAPIReady = function() {
 htmlVideo.addEventListener('play', () => {
   if (suppressEvents) return;
   isPlaying = true; updatePlayBtn();
-  socket.emit('play', { time: htmlVideo.currentTime });
+  if (!justWoke()) socket.emit('play', { time: htmlVideo.currentTime });
 });
 htmlVideo.addEventListener('pause', () => {
   if (suppressEvents) return;
   isPlaying = false; updatePlayBtn();
-  socket.emit('pause', { time: htmlVideo.currentTime });
+  if (!justWoke()) socket.emit('pause', { time: htmlVideo.currentTime });
 });
 htmlVideo.addEventListener('loadedmetadata', () => { hideFallback(); duration = htmlVideo.duration || 0; });
 htmlVideo.addEventListener('ended', () => { isPlaying = false; updatePlayBtn(); socket.emit('queue_next'); });
 htmlVideo.addEventListener('seeked', () => {
-  if (suppressEvents || isOwnSeek(htmlVideo.currentTime)) return;
+  if (suppressEvents || isOwnSeek(htmlVideo.currentTime) || justWoke()) return;
   socket.emit('seek', { time: htmlVideo.currentTime });
 });
 htmlVideo.addEventListener('error', () => {
@@ -616,7 +640,6 @@ const CONNECTION_ERRORS = {
   failed: 'Сейчас создать комнату или войти в неё нельзя — причина указана выше',
   wait: 'Связь ещё не установлена. Подождите несколько секунд и попробуйте ещё раз'
 };
-const CHECK_LINK = { href: 'check.html', text: 'Проверить связь' };
 const NOTICE_SPINNER = '<span class="spin" aria-hidden="true"></span>';
 const NOTICE_WARNING = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 2.5 20h19L12 3.5Z"/><path d="M12 10v4.5M12 17.3h.01"/></svg>';
 
@@ -633,7 +656,7 @@ function serverNoticeText() {
   }
   if (Date.now() - waitingSince >= SLOW_AFTER) {
     return P2P_MODE
-      ? { warn: true, title: 'Не удаётся установить связь', text: 'Сервис, через который участники находят друг друга, не отвечает. Проверьте интернет и обновите страницу. Если включён VPN или блокировщик, попробуйте без него.', link: CHECK_LINK }
+      ? { warn: true, title: 'Не удаётся установить связь', text: 'Сервис, через который участники находят друг друга, не отвечает. Проверьте интернет и обновите страницу. Если включён VPN или блокировщик, попробуйте без него.' }
       : { warn: true, title: 'Сервер не отвечает', text: `Не удаётся подключиться к ${SERVER_URL}. Попробуйте обновить страницу позже. Владельцу сайта: проверьте адрес в файле config.js и что сервер запущен.` };
   }
   if (serverState === 'offline') {
@@ -652,14 +675,6 @@ function renderServerNotice() {
   box.innerHTML = (notice.warn ? NOTICE_WARNING : NOTICE_SPINNER) + '<div><b></b><p></p></div>';
   box.querySelector('b').textContent = notice.title;
   box.querySelector('p').textContent = notice.text;
-  if (notice.link) {
-    const link = document.createElement('a');
-    link.href = notice.link.href;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    link.textContent = notice.link.text;
-    box.querySelector('p').append(' ', link);
-  }
 }
 
 function setServerState(state, problem) {
@@ -689,8 +704,29 @@ function serverReady() {
   return false;
 }
 
-socket.on('connect', () => setServerState('online'));
-socket.on('disconnect', () => { if (serverState !== 'failed') setServerState('offline'); });
+// Индикатор в шапке комнаты: есть ли сейчас связь с остальными участниками
+function updateSyncPill() {
+  const ok = !!socket.connected;
+  $('syncPill').classList.toggle('is-offline', !ok);
+  $('syncText').textContent = ok ? 'Синхронизировано' : 'Восстанавливаем связь…';
+}
+
+let rejoining = false;
+socket.on('connect', () => {
+  const again = wasOnline;
+  setServerState('online');
+  updateSyncPill();
+  // Сервер считает участника вышедшим, как только рвётся связь, поэтому после восстановления
+  // входим в комнату заново. В режиме без сервера возвращением в комнату занимается p2p.js.
+  if (!P2P_MODE && again && roomId) {
+    rejoining = true;
+    socket.emit('join_room', { roomId, name: myName, color: myColor });
+  }
+});
+socket.on('disconnect', () => {
+  if (serverState !== 'failed') setServerState('offline');
+  updateSyncPill();
+});
 socket.on('connect_error', (err) => {
   if (P2P_MODE) {
     // p2p.js сам повторяет попытки; окончательны только эти две причины
@@ -711,6 +747,8 @@ socket.on('connect_error', (err) => {
 });
 // Короткие сообщения о состоянии комнаты (режим без сервера)
 socket.on('notice', (data) => { if (data && data.text && !appEl.classList.contains('hidden')) toast(data.text); });
+// Ход входа в комнату: показываем под кнопками на экране входа
+socket.on('lobby_status', (data) => { if (data && data.text && $('lobbyError').dataset.busy === '1') setLobbyBusy(data.text); });
 
 if (TRANSPORT_LOADED) setServerState('connecting');
 else setServerState('failed', 'lib');
@@ -726,7 +764,7 @@ function setLobbyBusy(text) {
   error.classList.toggle('is-info', busy);
   if (busy) {
     error.textContent = text;
-    lobbyBusyTimer = setTimeout(() => setLobbyBusy(''), 30000);
+    lobbyBusyTimer = setTimeout(() => setLobbyBusy(''), 60000);
   } else if (error.dataset.busy === '1') {
     error.textContent = '';
   }
@@ -766,17 +804,28 @@ nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') $('createBtn
 roomInput.addEventListener('keydown', e => { if (e.key === 'Enter') $('joinBtn').click(); });
 
 socket.on('room_created', (state) => { setLobbyBusy(''); applyState(state); enterRoom(); welcomeMessage(); toast('Комната создана. Отправьте код участникам'); });
-socket.on('room_joined', (state) => { setLobbyBusy(''); applyState(state); enterRoom(); welcomeMessage(); toast('Вы подключены к комнате'); });
+socket.on('room_joined', (state) => {
+  setLobbyBusy('');
+  if (rejoining) { rejoining = false; resumeRoom(state); toast('Соединение восстановлено'); return; }
+  applyState(state); enterRoom(); welcomeMessage(); toast('Вы подключены к комнате');
+});
 socket.on('app_error', (e) => {
   const message = (e && e.message) || 'Произошла ошибка';
+  rejoining = false;
   if (appEl.classList.contains('hidden')) { setLobbyBusy(''); $('lobbyError').textContent = message; }
   else toast(message);
 });
-socket.on('reconnect', () => {
-  if (!roomId) return;
-  socket.emit('join_room', { roomId, name: myName, color: myColor });
-  toast('Соединение восстановлено');
-});
+
+// Возвращение в комнату после обрыва связи: обновляем то, что могло измениться за это время
+function resumeRoom(state) {
+  if (!state) return;
+  renderUsers(state.users, state.hostId);
+  renderQueue(state.queue || []);
+  const v = state.video ? normalizeVideo(state.video) : null;
+  if (!v) return;
+  if (!currentVideo || currentVideo.url !== v.url) loadVideo(v, false);
+  syncToState(state, 0);
+}
 
 // Догоняем состояние комнаты, даже если плеер ещё инициализируется
 function syncToState(state, attempt) {

@@ -12,7 +12,7 @@ const io = new Server(server, {
 
 // Файлы сайта лежат в корне проекта — оттуда же их раздаёт GitHub Pages.
 // Сервер отдаёт только их: server.js, package.json и прочее наружу не попадает.
-const SITE_FILES = ['index.html', 'style.css', 'app.js', 'p2p.js', 'check.html'];
+const SITE_FILES = ['index.html', 'style.css', 'app.js', 'p2p.js'];
 const SITE_DIRS = ['images', 'vendor'];
 
 // Сайт, открытый с самого сервера, подключается к нему же — что бы ни было записано

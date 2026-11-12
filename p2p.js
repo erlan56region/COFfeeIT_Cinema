@@ -37,11 +37,12 @@
     connect: 12000,        // ждём соединения с организатором при входе
     connectRecover: 7000,  // то же при восстановлении комнаты
     welcome: 6000,         // ждём состояние комнаты после соединения
-    joinSearch: 6000,      // сколько ищем комнату (сервис отвечает «такой нет» примерно через 5 с)
-    ping: 5000,            // участник → организатор
-    hubSilence: 16000,     // организатор молчит дольше — считаем, что связь с ним потеряна
+    joinSearch: 9000,      // сколько ищем комнату (сервис отвечает «такой нет» примерно через 5 с)
+    joinConnect: 22000,    // сколько пробуем соединиться, если комната есть, но организатор не отвечает
+    ping: 4000,            // участник → организатор
+    hubSilence: 12000,     // организатор молчит дольше — считаем, что связь с ним потеряна
     rep: 8000,             // организатор → участники: копия состояния
-    memberSilence: 20000,  // участник молчит дольше — считаем его соединение оборванным
+    memberSilence: 16000,  // участник молчит дольше — считаем его соединение оборванным
     memberGrace: 12000,    // сколько держим место за участником, у которого оборвалась связь
     returnGrace: 30000,    // после смены организатора ждём возвращения остальных
     claimStagger: 6000,    // очерёдность, в которой участники пробуют стать организатором
@@ -1068,9 +1069,14 @@
     function resumeMember(result) {
       const hadVideo = replica && replica.video ? replica.video.url : null;
       const hadHost = replica ? replica.hostId : null;
+      const hadUsers = replica ? replica.users.slice() : [];
       const known = new Set(history.map((m) => m.id));
       const state = enterMember(result);
       emitLocal('users_update', state);
+      const present = new Set(state.users.map((u) => u.id));
+      hadUsers.forEach((u) => {
+        if (u.id !== me.id && !present.has(u.id)) emitLocal('system_message', { text: `${u.name} покинул комнату`, time: Date.now() });
+      });
       const host = state.users.find((u) => u.id === state.hostId);
       if (host && state.hostId !== hadHost) emitLocal('system_message', { text: `Комнату теперь ведёт ${host.name}`, time: Date.now() });
       emitLocal('queue_update', state.queue);
@@ -1122,9 +1128,11 @@
         if (!code) { emitLocal('app_error', { message: 'Комната не найдена. Проверьте код и попробуйте ещё раз.' }); return; }
         me.name = cleanName(payload && payload.name);
         me.color = cleanColor(payload && payload.color);
-        const until = Date.now() + timing.joinSearch;
+        const startedAt = Date.now();
         let reason = 'no-signal';
-        do {
+        let attempt = 0;
+        for (;;) {
+          attempt += 1;
           if (!(await waitClientPeer(timing.signalOpen))) { reason = 'no-signal'; break; }
           const joined = await connectToHub(code, false, timing.connect);
           if (closed) return;
@@ -1137,14 +1145,18 @@
           }
           reason = joined.reason;
           if (reason === 'rejected') { emitLocal('app_error', { message: joined.message || 'Не удалось войти в комнату' }); return; }
-          // организатор мог как раз смениться — пробуем ещё немного
+          // Организатор мог как раз смениться или ненадолго свернуть браузер — пробуем ещё.
+          // «Комнаты нет» сервис сообщает быстро, поэтому при неверном коде ждать долго не приходится.
+          const limit = reason === 'not-found' ? timing.joinSearch : timing.joinConnect;
+          if (Date.now() - startedAt >= limit) break;
+          emitLocal('lobby_status', { text: reason === 'not-found' ? 'Комната пока не отвечает. Пробуем ещё раз…' : 'Соединяемся с организатором комнаты…' });
           await sleep(700);
-        } while (Date.now() < until);
+          if (closed) return;
+        }
         const text = {
           'no-signal': 'Нет связи с сервисом соединений. Проверьте интернет и попробуйте ещё раз',
-          'timeout': 'Комната найдена, но соединиться с её организатором не удалось. Попробуйте ещё раз или подключитесь через другую сеть',
-          'failed': 'Комната найдена, но соединиться с её организатором не удалось. Попробуйте ещё раз или подключитесь через другую сеть'
-        }[reason] || 'Комната не найдена. Проверьте код: комната существует, пока в ней есть хотя бы один участник.';
+          'not-found': 'Комната не найдена. Проверьте код. Комната существует, пока в ней есть хотя бы один участник; если организатор свернул браузер на телефоне, попросите его вернуться на страницу',
+        }[reason] || 'Комната найдена, но соединиться с её организатором не удалось. Попробуйте ещё раз. Если не помогает, отключите VPN или подключитесь через другую сеть';
         emitLocal('app_error', { message: text });
       } finally {
         busy = false;
@@ -1167,7 +1179,32 @@
       destroyPeer(clientPeer);
       online = false;
     }
+    // Пока страница была свёрнута (особенно на телефоне), браузер мог приостановить её и разорвать
+    // соединения. Когда страницу вернули на экран, не ждём таймеров, а проверяем связь сразу.
+    function onVisible() {
+      if (closed || !global.document || global.document.visibilityState !== 'visible') return;
+      if (role === 'hub') {
+        const peer = hubPeer;
+        if (peer && peer.disconnected && !peer.destroyed) {
+          try { peer.reconnect(); } catch (e) { /* повторит таймер */ }
+        }
+        return;
+      }
+      const peer = clientPeer;
+      if (peer && peer.disconnected && !peer.destroyed) {
+        clientRetry = 0;
+        try { peer.reconnect(); } catch (e) { destroyPeer(peer); }
+      }
+      if (role === 'member' && hubLink) {
+        if (Date.now() - lastHubSeen > timing.hubSilence) onHubLost(hubLink);
+        else send(hubLink.conn, { t: 'ping' });
+      }
+    }
+    if (global.document && global.document.addEventListener) {
+      global.document.addEventListener('visibilitychange', onVisible);
+    }
     if (global.addEventListener) {
+      global.addEventListener('online', onVisible);
       global.addEventListener('pagehide', leave);
       // страницу вернули кнопкой «Назад» из памяти браузера — соединения уже закрыты, начинаем заново
       global.addEventListener('pageshow', (event) => { if (event.persisted && closed) global.location.reload(); });
@@ -1228,7 +1265,7 @@
         return this;
       },
       disconnect() { leave(); return this; },
-      // для страницы проверки связи и для отладки
+      // для отладки и автоматических проверок
       info() {
         return {
           lib,

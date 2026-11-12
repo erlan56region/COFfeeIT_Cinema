@@ -91,7 +91,6 @@ img{display:block;max-width:100%}
 .server-notice b{display:block;font-size:13.5px;font-weight:600;color:#78350f;margin-bottom:2px}
 .server-notice p{word-break:break-word}
 .server-notice svg{flex-shrink:0;margin-top:1px;color:#d97706}
-.server-notice a{color:inherit;font-weight:600;text-decoration:underline;white-space:nowrap}
 .server-notice.is-wait{background:var(--surface2);border-color:var(--line);color:var(--muted)}
 .server-notice.is-wait b{color:var(--ink)}
 .server-notice .spin{width:16px;height:16px;flex-shrink:0;margin-top:2px;border-radius:50%;border:2px solid var(--line-strong);border-top-color:var(--accent);animation:spin .8s linear infinite}
@@ -145,6 +144,9 @@ img{display:block;max-width:100%}
 .greet-photo{width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--line)}
 .sync-pill{display:flex;align-items:center;gap:8px;background:var(--success-bg);border:1px solid var(--success-line);color:var(--success);padding:7px 13px;border-radius:99px;font-size:12.5px;font-weight:600}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--success);flex-shrink:0}
+.sync-pill.is-offline{background:#fffbeb;border-color:#fde68a;color:#b45309}
+.sync-pill.is-offline .sync-dot{background:#d97706;animation:sync-blink 1s ease-in-out infinite}
+@keyframes sync-blink{50%{opacity:.25}}
 .room-chip{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line-strong);padding:8px 14px;border-radius:10px;font-size:13.5px;font-weight:500;color:var(--muted);transition:.15s;min-height:42px}
 .room-chip:hover{border-color:var(--accent);color:var(--ink)}
 .room-chip b{letter-spacing:.12em;color:var(--ink);font-weight:700}
