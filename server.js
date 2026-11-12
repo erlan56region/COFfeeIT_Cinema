@@ -33,8 +33,11 @@ const rooms = new Map();
 
 // Допустимые типы реакций (ключи иконок на клиенте)
 const REACTION_KEYS = ['heart', 'fire', 'laugh', 'wow', 'clap', 'sad', 'party'];
+// youtube, vimeo, rutube, vk — встроенные плееры этих сервисов; direct — видеофайл или поток HLS;
 // link — ссылка на страницу другого сайта: в комнате её видят все, открывает каждый в своём браузере
-const VIDEO_TYPES = ['youtube', 'vimeo', 'direct', 'link'];
+const VIDEO_TYPES = ['youtube', 'vimeo', 'rutube', 'vk', 'direct', 'link'];
+// «Следующее видео» от нескольких участников сразу считаем одной просьбой (мс) — как в режиме без сервера
+const NEXT_GUARD = 2500;
 
 // Разрешены только настоящие адреса http/https
 function safeUrl(value) {
@@ -288,6 +291,11 @@ io.on('connection', (socket) => {
   socket.on('queue_next', () => {
     const target = room();
     if (!target || target.queue.length === 0) return;
+    // Видео заканчивается у всех участников сразу, и «следующее» просит каждый из них.
+    // Просьбы, пришедшие подряд, считаем одной — иначе очередь перескочила бы через несколько видео.
+    const now = Date.now();
+    if (now - (target.lastNextAt || 0) < NEXT_GUARD) return;
+    target.lastNextAt = now;
     const next = target.queue.shift();
     target.video = { url: next.url, type: next.type, title: next.title, addedBy: socket.id, addedByName: userName };
     target.playing = false;

@@ -22,8 +22,9 @@
   const ROOM_PREFIX = 'syncwatch-room-';
   const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const REACTION_KEYS = ['heart', 'fire', 'laugh', 'wow', 'clap', 'sad', 'party'];
+  // youtube, vimeo, rutube, vk — встроенные плееры этих сервисов; direct — видеофайл или поток HLS;
   // link — ссылка на страницу другого сайта: в комнате её видят все, открывает каждый в своём браузере
-  const VIDEO_TYPES = ['youtube', 'vimeo', 'direct', 'link'];
+  const VIDEO_TYPES = ['youtube', 'vimeo', 'rutube', 'vk', 'direct', 'link'];
   const DEFAULT_COLOR = '#4f46e5';
   const MAX_MEMBERS = 30;
   const MAX_QUEUE = 50;
