@@ -1206,7 +1206,10 @@ function loadVideo(video, autoplay) {
     htmlVideo.classList.remove('hidden');
     htmlVideo.dataset.url = video.url;
     if (!isLink && isHlsUrl(video.url) && !browserPlaysHls()) {
-      // поток HLS, который браузер сам не воспроизводит
+      // Поток HLS, который браузер сам не воспроизводит. Прежний источник выгружаем сразу: пока загружается
+      // hls.js, его запоздавшие события (например, ошибка загрузки) относились бы уже к новому видео.
+      htmlVideo.removeAttribute('src');
+      htmlVideo.load();
       startHls(video);
     } else {
       htmlVideo.src = video.url;
