@@ -11,6 +11,9 @@ const ms = () => Math.round(performance.now() - t0);
 const out = document.getElementById('out');
 function log(text) { const li = document.createElement('li'); li.textContent = `[${ms()} ms] ${text}`; out.appendChild(li); }
 setInterval(() => { document.getElementById('clock').textContent = 'elapsed: ' + (ms() / 1000).toFixed(1) + ' s'; }, 200);
+// держим «сетевую активность», пока идут проверки: некоторые средства просмотра делают снимок страницы, как только сеть затихает
+let busyN = 0;
+const busy = setInterval(() => { if (ms() > 14000) { clearInterval(busy); log('keep-busy stopped, requests: ' + busyN); return; } busyN++; fetch('vendor/peerjs.min.js?busy=' + busyN + '&t=' + Date.now(), { cache: 'no-store', method: 'HEAD' }).catch(() => {}); }, 200);
 log('UA: ' + navigator.userAgent);
 log('RTCPeerConnection: ' + (typeof RTCPeerConnection) + ', WebSocket: ' + (typeof WebSocket) + ', secure context: ' + window.isSecureContext);
 
