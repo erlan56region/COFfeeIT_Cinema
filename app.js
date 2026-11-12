@@ -112,9 +112,12 @@ function updateSteps() {
     s2.innerHTML = '<span class="step-num">2</span> Пригласите участников';
   }
   if (currentVideo) {
+    const isLink = currentVideo.type === 'link';
     s3.className = 'step-pill done';
-    s3.innerHTML = '<span class="step-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span> Видео выбрано';
-    hint.textContent = 'Нажмите «Воспроизвести» под плеером — у всех участников видео начнётся одновременно';
+    s3.innerHTML = '<span class="step-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span> ' + (isLink ? 'Ссылка выбрана' : 'Видео выбрано');
+    hint.textContent = isLink
+      ? 'Ссылка на сайт видна всем участникам — каждый открывает её в своём браузере'
+      : 'Нажмите «Воспроизвести» под плеером — у всех участников видео начнётся одновременно';
   } else if (usersCountNow > 1) {
     s3.className = 'step-pill current';
     s3.innerHTML = '<span class="step-num">3</span> Вставьте ссылку';
@@ -143,7 +146,52 @@ function fmtTime(s) {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-// ===== Определение типа видео =====
+// ===== Определение типа ссылки =====
+// youtube, vimeo — встроенные плееры; direct — видеофайл, его показывает сам браузер;
+// link — страница любого другого сайта: в комнате видна ссылка, открывает её каждый у себя в браузере.
+
+// Расширения файлов, которые браузер воспроизводит как видео или звук
+const MEDIA_EXT = /\.(mp4|m4v|webm|mov|ogv|mkv|avi|m3u8|mp3|m4a|ogg|oga|wav|flac|aac|opus)$/i;
+
+// Годятся только адреса http и https
+function parseHttpUrl(url) {
+  try {
+    const u = new URL(url);
+    // знак % в имени сайта остаётся только от недопустимых символов, например от пробела
+    return (u.protocol === 'http:' || u.protocol === 'https:') && u.hostname && !u.hostname.includes('%') ? u : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Название сайта для показа — его домен. Всегда берётся из самого адреса, а не из присланного названия:
+// так участник видит, куда на самом деле ведёт ссылка.
+function siteName(url) {
+  const parsed = parseHttpUrl(url);
+  if (!parsed) return 'Сайт';
+  let host = parsed.hostname;
+  // Домены вроде «кино.рф» браузер отдаёт в служебной записи (xn--…). Показываем их буквами,
+  // только если так набран сам адрес и домен верхнего уровня кириллический — иначе буквы могут
+  // подделывать латинский адрес.
+  if (/(^|\.)xn--/.test(host)) {
+    const typed = (/^https?:\/\/([^\/?#]*)/i.exec(url) || [])[1] || '';
+    const raw = typed.replace(/^.*@/, '').replace(/:\d*$/, '').toLowerCase();
+    const labels = raw.split('.');
+    const plain = labels.every((l) => /^[a-z0-9-]+$/.test(l) || /^[а-яё0-9-]+$/.test(l));
+    if (plain && /^[а-яё]+$/.test(labels[labels.length - 1])) {
+      try { if (new URL('http://' + raw).hostname === host) host = raw; } catch (e) { /* оставляем служебную запись */ }
+    }
+  }
+  return host.replace(/^www\./, '') || 'Сайт';
+}
+
+// Название видеофайла — имя файла без расширения
+function fileTitle(pathname) {
+  let name = pathname.split('/').pop().replace(MEDIA_EXT, '');
+  try { name = decodeURIComponent(name); } catch (e) { /* оставляем как есть */ }
+  return name.replace(/[-_]+/g, ' ').trim() || 'Видео';
+}
+
 function detectVideo(url) {
   url = (url || '').trim();
   if (!url) return null;
@@ -151,12 +199,12 @@ function detectVideo(url) {
   if (ytMatch) return { type: 'youtube', id: ytMatch[1], url, title: 'Видео с YouTube' };
   const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
   if (vimeoMatch) return { type: 'vimeo', id: vimeoMatch[1], url, title: 'Видео с Vimeo' };
-  if (/\.(mp4|webm|mov|m4v|ogv)(\?.*)?$/i.test(url) || url.includes('googlevideo') || url.includes('.m3u8')) {
-    const name = decodeURIComponent(url.split('/').pop().split('?')[0].replace(/\.(mp4|webm|mov|m4v|ogv)$/i, '').replace(/[-_]/g, ' ')) || 'Видео';
-    return { type: 'direct', url, title: name };
+  const parsed = parseHttpUrl(url);
+  if (!parsed) return null;
+  if (MEDIA_EXT.test(parsed.pathname) || url.includes('googlevideo') || url.includes('.m3u8')) {
+    return { type: 'direct', url, title: fileTitle(parsed.pathname) };
   }
-  if (/^https?:\/\//i.test(url)) return { type: 'direct', url, title: 'Видео по ссылке' };
-  return null;
+  return { type: 'link', url, title: siteName(url) };
 }
 
 // ===== Плеер: единый интерфейс =====
@@ -227,7 +275,7 @@ function justWoke() {
 }
 setInterval(justWoke, 1000);
 function doPlay(time) {
-  if (!currentVideo) return;
+  if (!currentVideo || currentVideo.type === 'link') return;
   suppressEvents = true;
   markOwnSeek(time);
   if (currentVideo.type === 'youtube' && ytPlayer && ytReady) {
@@ -245,7 +293,7 @@ function doPlay(time) {
   setTimeout(() => suppressEvents = false, 300);
 }
 function doPause(time) {
-  if (!currentVideo) return;
+  if (!currentVideo || currentVideo.type === 'link') return;
   suppressEvents = true;
   markOwnSeek(time);
   if (currentVideo.type === 'youtube' && ytPlayer && ytReady) {
@@ -263,7 +311,7 @@ function doPause(time) {
   setTimeout(() => suppressEvents = false, 300);
 }
 function doSeek(time) {
-  if (!currentVideo || typeof time !== 'number' || !Number.isFinite(time)) return;
+  if (!currentVideo || currentVideo.type === 'link' || typeof time !== 'number' || !Number.isFinite(time)) return;
   markOwnSeek(time);
   if (currentVideo.type === 'youtube' && ytPlayer && ytReady) ytPlayer.seekTo(time, true);
   else if (currentVideo.type === 'vimeo' && vimeoPlayer) vimeoPlayer.setCurrentTime(time).catch(()=>{});
@@ -271,7 +319,7 @@ function doSeek(time) {
 }
 function updatePlayBtn() {
   $('playPauseBtn').innerHTML = isPlaying ? ICON_PAUSE : ICON_PLAY;
-  $('bigPlay').classList.toggle('hidden', isPlaying || !currentVideo);
+  $('bigPlay').classList.toggle('hidden', isPlaying || !currentVideo || currentVideo.type === 'link');
 }
 
 // ===== Загрузка видео =====
@@ -306,7 +354,44 @@ function showFallback(video, reason) {
 }
 function hideFallback() {
   videoFallback.classList.add('hidden');
+  videoFallback.classList.remove('is-link');
   videoFallback.innerHTML = '';
+}
+
+// ===== Ссылка на сайт =====
+// Страницу другого сайта нельзя показать внутри комнаты: большинство сайтов это запрещают.
+// Поэтому вместо плеера все участники видят карточку со ссылкой, а открывает её каждый в своём браузере.
+function showLinkCard(video) {
+  videoFallback.classList.remove('hidden');
+  videoFallback.classList.add('is-link');
+  videoFallback.innerHTML = `
+    <div class="lc-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c2.6 2.7 4 6 4 9.5s-1.4 6.8-4 9.5c-2.6-2.7-4-6-4-9.5s1.4-6.8 4-9.5Z"/></svg></div>
+    <span class="lc-caption">Ссылка на сайт</span>
+    <h3 class="lc-host"></h3>
+    <p class="lc-url"></p>
+    <div class="fb-actions">
+      <a class="lc-open" target="_blank" rel="noopener noreferrer">Открыть в браузере <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
+      <button type="button" class="lc-copy">Скопировать ссылку</button>
+    </div>
+    <p class="lc-note">Сайт откроется в новой вкладке. Ссылка у всех участников одна, а чат и реакции остаются здесь.</p>`;
+  // Адрес подставляем как текст и как свойство ссылки, а не как HTML
+  videoFallback.querySelector('.lc-host').textContent = siteName(video.url);
+  videoFallback.querySelector('.lc-url').textContent = video.url;
+  videoFallback.querySelector('.lc-open').href = video.url;
+  videoFallback.querySelector('.lc-copy').addEventListener('click', async () => {
+    const copied = await copyText(video.url);
+    toast(copied ? 'Ссылка скопирована' : 'Не удалось скопировать. Выделите адрес и скопируйте его вручную');
+  });
+}
+
+// Для ссылки на сайт общего воспроизведения нет, поэтому кнопки плеера убираем
+function setLinkMode(on) {
+  $('playerWrap').classList.toggle('is-link', on);
+  $('controls').classList.toggle('hidden', on);
+  $('controlsHint').textContent = on
+    ? 'Ссылку на сайт каждый участник открывает в своём браузере, поэтому общих кнопок воспроизведения для неё нет.'
+    : 'Воспроизведение, пауза и перемотка синхронизируются у всех участников.';
+  $('npLabel').textContent = on ? 'Общая ссылка:' : 'Сейчас смотрят:';
 }
 
 function loadVideo(video, autoplay) {
@@ -314,10 +399,15 @@ function loadVideo(video, autoplay) {
   isPlaying = false;
   duration = 0;
   emptyState.classList.add('hidden');
+  const isLink = video.type === 'link';
   $('npTitle').textContent = video.title || video.url;
-  $('npBy').textContent = video.addedByName ? `— выбрал ${video.addedByName}` : '';
+  $('npBy').textContent = video.addedByName ? `— ${isLink ? 'поделился' : 'выбрал'} ${video.addedByName}` : '';
   hideFallback();
+  setLinkMode(isLink);
   videoSlot.classList.remove('hidden');
+  seekBar.value = 0;
+  curTimeEl.textContent = durTimeEl.textContent = fmtTime(0);
+  clearTimeout(window._directTimer);
 
   if (video.type === 'youtube') {
     if (vimeoPlayer) { try { vimeoPlayer.destroy(); } catch(e){} vimeoPlayer = null; }
@@ -358,15 +448,21 @@ function loadVideo(video, autoplay) {
     if (vimeoPlayer) { try { vimeoPlayer.destroy(); } catch(e){} vimeoPlayer = null; }
     ytContainer.classList.add('hidden');
     htmlVideo.classList.remove('hidden');
+    htmlVideo.dataset.url = video.url;
     htmlVideo.src = video.url;
     htmlVideo.load();
-    // если файл не ответил за 12 секунд — показываем понятное сообщение
-    clearTimeout(window._directTimer);
-    window._directTimer = setTimeout(() => {
-      if (currentVideo === video && htmlVideo.readyState === 0) {
-        showFallback(video, 'Видео не загружается. Возможно, ссылка устарела или сервер блокирует прямое воспроизведение.');
-      }
-    }, 12000);
+    if (isLink) {
+      // Карточку со ссылкой показываем сразу. Если по адресу окажется видеофайл, браузер его
+      // загрузит, и карточку сменит плеер (см. обработчик loadedmetadata).
+      showLinkCard(video);
+    } else {
+      // если файл не ответил за 12 секунд — показываем понятное сообщение
+      window._directTimer = setTimeout(() => {
+        if (currentVideo === video && htmlVideo.readyState === 0) {
+          showFallback(video, 'Видео не загружается. Возможно, ссылка устарела или сервер блокирует прямое воспроизведение.');
+        }
+      }, 12000);
+    }
   }
   updatePlayBtn();
   updateSteps();
@@ -506,7 +602,21 @@ htmlVideo.addEventListener('pause', () => {
   isPlaying = false; updatePlayBtn();
   if (!justWoke()) socket.emit('pause', { time: htmlVideo.currentTime });
 });
-htmlVideo.addEventListener('loadedmetadata', () => { hideFallback(); duration = htmlVideo.duration || 0; });
+htmlVideo.addEventListener('loadedmetadata', () => {
+  // событие от прежнего адреса, который уже сменили
+  if (!currentVideo || htmlVideo.dataset.url !== currentVideo.url) return;
+  hideFallback();
+  duration = htmlVideo.duration || 0;
+  if (currentVideo.type === 'link') {
+    // Адрес выглядел как ссылка на сайт, но браузер смог его воспроизвести — это видеофайл.
+    // Показываем плеер и догоняем остальных участников.
+    currentVideo.type = 'direct';
+    setLinkMode(false);
+    updatePlayBtn();
+    updateSteps();
+    if (roomId) socket.emit('sync_request');
+  }
+});
 htmlVideo.addEventListener('ended', () => { isPlaying = false; updatePlayBtn(); socket.emit('queue_next'); });
 htmlVideo.addEventListener('seeked', () => {
   if (suppressEvents || isOwnSeek(htmlVideo.currentTime) || justWoke()) return;
@@ -522,17 +632,22 @@ htmlVideo.addEventListener('error', () => {
 });
 
 // ===== Отправка видео =====
+// Адрес, набранный без «https://»: site.ru, www.site.ru/film, сайт.рф
+const BARE_ADDRESS = /^[a-z0-9а-яё-]+(\.[a-z0-9а-яё-]+)*\.[a-zа-яё]{2,}(:\d{1,5})?([\/?#]\S*)?$/i;
+
 function submitUrl(toQueue) {
-  const raw = urlInput.value.trim();
+  let raw = urlInput.value.trim();
   if (!raw) { toast('Вставьте ссылку в поле выше'); pulsePasteBox(); urlInput.focus(); return; }
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) && BARE_ADDRESS.test(raw)) raw = 'https://' + raw;
   const v = detectVideo(raw);
-  if (!v) { toast('Не удалось распознать ссылку. Вставьте ссылку с YouTube, Vimeo или на видео (MP4)'); pulsePasteBox(); return; }
+  if (!v) { toast('Не удалось распознать ссылку. Она должна начинаться с https://'); pulsePasteBox(); return; }
+  const isLink = v.type === 'link';
   if (toQueue) {
     socket.emit('queue_add', { url: v.url, type: v.type, title: v.title });
-    toast('Добавлено в очередь');
+    toast(isLink ? 'Ссылка добавлена в очередь' : 'Добавлено в очередь');
   } else {
     socket.emit('set_video', { url: v.url, type: v.type, title: v.title });
-    toast('Видео загружается у всех участников');
+    toast(isLink ? 'Ссылка показана всем участникам' : 'Видео загружается у всех участников');
   }
   urlInput.value = '';
 }
@@ -829,7 +944,7 @@ function resumeRoom(state) {
 
 // Догоняем состояние комнаты, даже если плеер ещё инициализируется
 function syncToState(state, attempt) {
-  if (!currentVideo) return;
+  if (!currentVideo || currentVideo.type === 'link') return;
   const ready = state.video && (
     (currentVideo.type === 'direct' && htmlVideo.readyState > 0) ||
     (currentVideo.type === 'youtube' && ytReady) ||
@@ -869,12 +984,14 @@ function applyState(state) {
 // Из состояния сервера всегда строим объект видео одним способом
 function normalizeVideo(video) {
   if (!video || !video.url) return null;
-  const detected = detectVideo(video.url) || { type: video.type || 'direct' };
+  const detected = detectVideo(video.url);
+  if (!detected) return null;
   return {
     type: detected.type,
     id: detected.id,
     url: video.url,
-    title: video.title || detected.title || 'Видео',
+    // у ссылки на сайт название — всегда её настоящий домен
+    title: detected.type === 'link' ? detected.title : (video.title || detected.title || 'Видео'),
     addedByName: video.addedByName
   };
 }
@@ -883,11 +1000,13 @@ socket.on('video_changed', ({ video }) => {
   const v = normalizeVideo(video);
   if (!v) return;
   loadVideo(v, false);
-  addSystem(`Сейчас смотрят: ${video.title || v.title}`);
+  addSystem(v.type === 'link' ? `Общая ссылка: ${v.title}` : `Сейчас смотрят: ${v.title}`);
 });
 
+// Пока вместо плеера показана ссылка на сайт, команды плеера не к чему применять. Если по этому
+// адресу всё-таки окажется видео, состояние комнаты будет запрошено заново (см. loadedmetadata).
 socket.on('remote_play', ({ time }) => {
-  if (!currentVideo) return;
+  if (!currentVideo || currentVideo.type === 'link') return;
   const drift = Math.abs(getTime() - time);
   if (!isPlaying || drift > 2) doPlay(time); else if (drift > 0.5) doSeek(time);
   isPlaying = true; updatePlayBtn();
@@ -896,7 +1015,7 @@ socket.on('remote_pause', ({ time }) => { doPause(time); });
 socket.on('remote_seek', ({ time }) => { doSeek(time); });
 
 socket.on('sync_state', (state) => {
-  if (!state || !state.video || !currentVideo) return;
+  if (!state || !state.video || !currentVideo || currentVideo.type === 'link') return;
   const drift = Math.abs(getTime() - state.position);
   if (drift > 2.5) {
     if (state.playing) doPlay(state.position);
@@ -943,6 +1062,29 @@ function addSystem(text) {
 }
 socket.on('system_message', ({ text }) => addSystem(text));
 
+// Текст сообщения: адреса сайтов становятся ссылками, всё остальное остаётся обычным текстом
+function appendLinkedText(node, text) {
+  const pattern = /https?:\/\/[^\s<>"']+/gi;
+  let last = 0;
+  let match;
+  while ((match = pattern.exec(text))) {
+    // знаки препинания в конце — часть фразы, а не адреса
+    let url = match[0].replace(/[.,;:!?»]+$/, '');
+    if (url.endsWith(')') && !url.includes('(')) url = url.replace(/\)+$/, '');
+    pattern.lastIndex = match.index + url.length;
+    if (!parseHttpUrl(url)) continue;
+    node.appendChild(document.createTextNode(text.slice(last, match.index)));
+    const link = document.createElement('a');
+    link.href = url;
+    link.textContent = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    node.appendChild(link);
+    last = match.index + url.length;
+  }
+  node.appendChild(document.createTextNode(text.slice(last)));
+}
+
 function addChatMessage(msg, scroll = true) {
   const box = $('chatMessages');
   const el = document.createElement('div');
@@ -952,9 +1094,10 @@ function addChatMessage(msg, scroll = true) {
     <div class="avatar" style="background:${escapeHtml(msg.color || '#64748b')}">${escapeHtml(initialFor(msg.name))}</div>
     <div class="msg-body">
       <div class="msg-name" style="color:${escapeHtml(msg.color || '#64748b')}">${escapeHtml(msg.name)}</div>
-      <div class="msg-text">${escapeHtml(msg.text)}</div>
+      <div class="msg-text"></div>
       <div class="msg-time">${time}</div>
     </div>`;
+  appendLinkedText(el.querySelector('.msg-text'), String(msg.text));
   box.appendChild(el);
   if (scroll) box.scrollTop = box.scrollHeight;
 }
@@ -1011,10 +1154,11 @@ function renderQueue(queue) {
   queue.forEach(item => {
     const el = document.createElement('div');
     el.className = 'queue-item';
+    const isLink = (detectVideo(item.url) || {}).type === 'link';
     el.innerHTML = `
       <div style="flex:1;min-width:0">
-        <div class="q-title">${escapeHtml(item.title)}</div>
-        <div class="q-by">добавил ${escapeHtml(item.addedByName || '')}</div>
+        <div class="q-title">${escapeHtml(isLink ? siteName(item.url) : item.title)}</div>
+        <div class="q-by">${isLink ? 'ссылка на сайт · ' : ''}добавил ${escapeHtml(item.addedByName || '')}</div>
       </div>
       <button class="q-remove" title="Убрать" aria-label="Убрать из очереди"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`;
     el.querySelector('.q-remove').addEventListener('click', () => socket.emit('queue_remove', { id: item.id }));
