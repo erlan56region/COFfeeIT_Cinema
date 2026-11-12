@@ -52,6 +52,8 @@ let duration = 0;
 let suppressEvents = false;
 let pendingVideo = null;
 let usersCountNow = 1;
+let embed = null;           // встроенный плеер Rutube или VK Видео (см. раздел «Rutube и VK Видео»)
+let hls = null;             // проигрыватель потоков HLS (см. раздел «Потоки HLS»)
 
 // Аватар — инициал имени
 function initialFor(name) {
@@ -147,7 +149,8 @@ function fmtTime(s) {
 }
 
 // ===== Определение типа ссылки =====
-// youtube, vimeo — встроенные плееры; direct — видеофайл, его показывает сам браузер;
+// youtube, vimeo, rutube, vk — встроенные плееры этих сервисов; direct — видеофайл или поток HLS,
+// его показывает сам браузер;
 // link — страница любого другого сайта: в комнате видна ссылка, открывает её каждый у себя в браузере.
 
 // Расширения файлов, которые браузер воспроизводит как видео или звук
@@ -192,6 +195,44 @@ function fileTitle(pathname) {
   return name.replace(/[-_]+/g, ' ').trim() || 'Видео';
 }
 
+// Rutube и VK Видео: из ссылки на страницу видео получаем адрес плеера для вставки на сайт.
+// Rutube — https://rutube.ru/info/embed/, VK Видео — https://dev.vk.com/ru/widgets/video
+const RUTUBE_HOST = /^(?:www\.|m\.)?rutube\.ru$/i;
+const VK_HOST = /^(?:www\.|m\.)?(vk\.com|vk\.ru|vkvideo\.ru)$/i;
+const VK_EMBED_HOSTS = ['vk.com', 'vk.ru'];   // сайты, с которых берём плеер VK Видео и его библиотеку: основной и запасной
+
+// rutube.ru/video/<id>/, /video/private/<id>/?p=<ключ>, /shorts/<id>/, /live/video/<id>/, /play/embed/<id>
+function rutubeEmbed(parsed) {
+  if (!RUTUBE_HOST.test(parsed.hostname)) return null;
+  const m = /^\/(?:video\/(?:private\/)?|shorts\/|live\/video\/|play\/embed\/)([0-9a-f]{32})(?:\/|$)/i.exec(parsed.pathname);
+  if (!m) return null;
+  const id = m[1].toLowerCase();
+  // видео с доступом «только по ссылке» открывается с ключом из параметра p
+  const key = parsed.searchParams.get('p') || '';
+  return { id, src: `https://rutube.ru/play/embed/${id}` + (/^[\w-]{1,80}$/.test(key) ? `/?p=${key}` : '') };
+}
+
+// vk.com/video-1_2, vkvideo.ru/video-1_2, vk.com/clip-1_2, …?z=video-1_2, video_ext.php?oid=-1&id=2
+function vkEmbed(parsed) {
+  if (!VK_HOST.test(parsed.hostname)) return null;
+  let oid = '', vid = '', hash = '';
+  if (/^\/video_ext\.php$/i.test(parsed.pathname)) {
+    oid = parsed.searchParams.get('oid') || '';
+    vid = parsed.searchParams.get('id') || '';
+    hash = parsed.searchParams.get('hash') || '';
+  } else {
+    const m = /(?:^|\/)(?:video|clip)(-?\d+)_(\d+)/.exec(parsed.pathname)
+      || /(?:^|[^a-z])(?:video|clip)(-?\d+)_(\d+)/i.exec(parsed.searchParams.get('z') || '');
+    if (m) { oid = m[1]; vid = m[2]; }
+  }
+  if (!/^-?\d{1,18}$/.test(oid) || !/^\d{1,18}$/.test(vid)) return null;
+  // js_api=1 включает управление плеером со страницы. Видео на vk.com, vk.ru и vkvideo.ru одни и те же,
+  // поэтому плеер всегда открываем на vk.com, а vk.ru — запасной адрес (см. connectVk).
+  const query = `/video_ext.php?oid=${oid}&id=${vid}&hd=2&js_api=1`
+    + (/^[0-9a-z]{4,64}$/i.test(hash) ? `&hash=${hash}` : '');
+  return { id: `${oid}_${vid}`, src: `https://${VK_EMBED_HOSTS[0]}${query}`, alt: `https://${VK_EMBED_HOSTS[1]}${query}` };
+}
+
 function detectVideo(url) {
   url = (url || '').trim();
   if (!url) return null;
@@ -201,6 +242,10 @@ function detectVideo(url) {
   if (vimeoMatch) return { type: 'vimeo', id: vimeoMatch[1], url, title: 'Видео с Vimeo' };
   const parsed = parseHttpUrl(url);
   if (!parsed) return null;
+  const rutube = rutubeEmbed(parsed);
+  if (rutube) return { type: 'rutube', id: rutube.id, url, title: 'Видео с Rutube' };
+  const vk = vkEmbed(parsed);
+  if (vk) return { type: 'vk', id: vk.id, url, title: 'Видео из VK' };
   if (MEDIA_EXT.test(parsed.pathname) || url.includes('googlevideo') || url.includes('.m3u8')) {
     return { type: 'direct', url, title: fileTitle(parsed.pathname) };
   }
@@ -219,6 +264,7 @@ function getTime() {
   }
   if (currentVideo.type === 'vimeo') return vimeoTime || 0;
   if (currentVideo.type === 'direct') return htmlVideo.currentTime || 0;
+  if (embed && embed.type === currentVideo.type) return embedPosition(embed);
   return 0;
 }
 function getDuration() {
@@ -231,6 +277,7 @@ function getDuration() {
   }
   if (currentVideo.type === 'vimeo') return vimeoDuration || 0;
   if (currentVideo.type === 'direct') return htmlVideo.duration || 0;
+  if (embed && embed.type === currentVideo.type) return embed.duration || 0;
   return 0;
 }
 let vimeoDuration = 0;
@@ -285,8 +332,11 @@ function doPlay(time) {
     if (typeof time === 'number') vimeoPlayer.setCurrentTime(time).catch(()=>{});
     vimeoPlayer.play().catch(()=>{});
   } else if (currentVideo.type === 'direct') {
-    if (typeof time === 'number') htmlVideo.currentTime = time;
+    if (isLiveStream()) catchUpLive();
+    else if (typeof time === 'number') htmlVideo.currentTime = time;
     htmlVideo.play().catch(()=>{});
+  } else if (embed && embed.type === currentVideo.type) {
+    embedCommand(embed, true, time);
   }
   isPlaying = true;
   updatePlayBtn();
@@ -303,8 +353,10 @@ function doPause(time) {
     if (typeof time === 'number') vimeoPlayer.setCurrentTime(time).catch(()=>{});
     vimeoPlayer.pause().catch(()=>{});
   } else if (currentVideo.type === 'direct') {
-    if (typeof time === 'number') htmlVideo.currentTime = time;
+    if (typeof time === 'number' && !isLiveStream()) htmlVideo.currentTime = time;
     htmlVideo.pause();
+  } else if (embed && embed.type === currentVideo.type) {
+    embedCommand(embed, false, time);
   }
   isPlaying = false;
   updatePlayBtn();
@@ -315,11 +367,700 @@ function doSeek(time) {
   markOwnSeek(time);
   if (currentVideo.type === 'youtube' && ytPlayer && ytReady) ytPlayer.seekTo(time, true);
   else if (currentVideo.type === 'vimeo' && vimeoPlayer) vimeoPlayer.setCurrentTime(time).catch(()=>{});
-  else if (currentVideo.type === 'direct') htmlVideo.currentTime = time;
+  else if (currentVideo.type === 'direct') { if (!isLiveStream()) htmlVideo.currentTime = time; }
+  else if (embed && embed.type === currentVideo.type) embedCommand(embed, isPlaying, time);
 }
 function updatePlayBtn() {
   $('playPauseBtn').innerHTML = isPlaying ? ICON_PAUSE : ICON_PLAY;
   $('bigPlay').classList.toggle('hidden', isPlaying || !currentVideo || currentVideo.type === 'link');
+}
+
+// ===== Rutube и VK Видео: встроенные плееры =====
+// Оба плеера работают в своём окне (iframe) и общаются со страницей сообщениями. У каждого свои команды
+// и события (см. connectRutube и connectVk), остальной код для них общий.
+//
+// Как это устроено:
+// - want — последняя команда комнаты: «идёт с такого-то места» или «стоит на таком-то месте». Плеер
+//   выполняет её сразу, а если ещё загружается или показывает рекламу — как только сможет;
+// - свою позицию плеер сообщает время от времени, между сообщениями она досчитывается по часам;
+// - на каждую команду сайта плеер отвечает событием. Такой отклик узнаём по тому, что он совпадает
+//   с отправленной командой. Остальные события — действия зрителя в самом плеере: о них узнают все участники.
+const EMBED_NAMES = { rutube: 'Rutube', vk: 'VK Видео' };
+const EMBED_ECHO = 2000;         // столько ждём от плеера отклика на команду «играть» или «пауза»
+const EMBED_SETTLE = 1200;       // столько плеер может «устраиваться» после перемотки: остановиться и пойти дальше
+const EMBED_CATCH_WAIT = 8000;   // столько после перемотки ждём, что плеер сам догонит комнату
+const EMBED_READY_WAIT = 20000;  // плеер не ответил за это время — сообщаем зрителю
+const EMBED_START_WAIT = 8000;   // видео не началось за это время — подсказываем нажать на сам плеер
+const EMBED_AD_MAX = 180000;     // если плеер не сообщил о конце рекламы, через это время считаем её законченной
+const EMBED_DEBUG = /[?&]debug\b/.test(location.search);   // «?debug» в адресе сайта — сообщения плееров видны в консоли
+
+function embedLog(...args) {
+  if (EMBED_DEBUG) console.log('[плеер]', ...args);
+}
+
+// Место, на котором сейчас комната, по её последней команде
+function wantTime(want) {
+  return Math.max(0, want.playing ? want.time + (Date.now() - want.at) / 1000 : want.time);
+}
+function embedAdNow(e) {
+  return e.ad && Date.now() < e.adUntil;
+}
+// Позиция по сообщениям самого плеера. На время рекламы видео стоит там, где она его прервала
+function embedOwnTime(e) {
+  if (embedAdNow(e)) return e.adFrom;
+  const t = e.playing ? e.time + (Date.now() - e.at) / 1000 : e.time;
+  return e.duration > 0 ? Math.min(t, e.duration) : t;
+}
+// Позиция для остального кода сайта. Пока плеер загружается или показывает рекламу, своей позиции
+// у него нет — тогда это место, на котором сейчас комната.
+function embedPosition(e) {
+  return !e.ready || !e.at || embedAdNow(e) ? wantTime(e.want) : embedOwnTime(e);
+}
+
+function startEmbed(video) {
+  const parsed = parseHttpUrl(video.url);
+  const info = parsed && (video.type === 'rutube' ? rutubeEmbed(parsed) : vkEmbed(parsed));
+  if (!info) { showFallback(video, 'Не удалось определить идентификатор видео в ссылке.'); return; }
+  const frame = document.createElement('iframe');
+  frame.src = info.src;
+  frame.title = 'Плеер ' + EMBED_NAMES[video.type];
+  // разрешения — те же, что в коде для вставки у самих сервисов
+  frame.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture; screen-wake-lock; clipboard-write';
+  frame.allowFullscreen = true;
+  frame.setAttribute('frameborder', '0');
+  ytContainer.innerHTML = '';
+  ytContainer.appendChild(frame);
+  const e = {
+    type: video.type,
+    frame,
+    alt: info.alt || '',     // запасной адрес плеера
+    send: null,              // команды конкретного плеера: play, pause, seek, volume
+    off: null,               // отключение от плеера
+    ready: false,            // плеер загрузился и принимает команды
+    playing: false,          // идёт ли видео в самом плеере
+    started: false,          // плеер начал воспроизведение после последней команды «играть»
+    everPlayed: false,       // видео в этом плеере хотя бы раз шло
+    time: 0, at: 0,          // последняя известная позиция и момент, когда она получена
+    exact: video.type === 'rutube',  // плеер сообщает время с долями секунды (VK Видео — не всегда)
+    duration: 0,
+    last: null,              // предыдущее сообщение плеера о времени: { r, at }
+    want: { playing: false, time: 0, at: Date.now() },
+    mine: null,              // команда «играть», которую дал сам зритель: { want, at }
+    expect: [],              // отклики, которых сайт ждёт от плеера на свои команды: { playing, until }
+    settleUntil: 0,          // до этого момента плеер занят перемоткой
+    ownSeek: null,           // перемотка, которую запросил сайт: { time, at, until }
+    sent: null,              // перемотка зрителя, о которой уже сообщили комнате: { time, at }
+    check: 0,                // сколько раз ещё можно повторить перемотку, если плеер её не выполнил
+    checkTime: 0, checkAt: 0,
+    resuming: false,         // после команды сайта ждём, когда видео снова пойдёт: тогда видно, насколько плеер отстал
+    caughtUp: false,         // отставание после перемотки для этой команды уже исправляли
+    sought: 0,               // момент, когда плеер сообщил о перемотке
+    caughtAt: 0,             // момент последнего «догоняния» комнаты
+    ad: false, adUntil: 0, adFrom: 0, adAt: 0,
+    ended: false, failed: false, hinted: false, troubled: false,
+    readyTimer: null, startTimer: null, pauseTimer: null
+  };
+  embed = e;
+  if (e.type === 'rutube') connectRutube(e); else connectVk(e);
+  e.readyTimer = setTimeout(() => { if (embed === e && !e.ready) embedTrouble(e); }, EMBED_READY_WAIT);
+}
+
+function destroyEmbed() {
+  const e = embed;
+  if (!e) return;
+  embed = null;
+  clearTimeout(e.readyTimer);
+  clearTimeout(e.startTimer);
+  clearTimeout(e.pauseTimer);
+  if (e.off) { try { e.off(); } catch (err) { /* плеер уже отключён */ } }
+  e.frame.remove();
+}
+
+// Плеер не отвечает. Само окно плеера не закрываем: возможно, видео в нём всё-таки можно смотреть
+function embedTrouble(e) {
+  if (e.troubled) return;
+  const name = EMBED_NAMES[e.type];
+  e.troubled = true;
+  $('controlsHint').textContent = `Плеер ${name} не отвечает на команды сайта: возможно, он не загрузился или его блокирует расширение браузера. Общие кнопки для этого видео пока не работают.`;
+  toast(`Плеер ${name} не отвечает. Проверьте, открывается ли это видео на сайте ${name}`);
+}
+
+// ----- Команды сайта плееру -----
+// playing — видео идёт или стоит; time — с какого места (если не задано, с текущего)
+function embedCommand(e, playing, time) {
+  const seek = typeof time === 'number' && Number.isFinite(time);
+  // Сверка с комнатой (раз в 15 секунд) может повторить команду, которую плеер ещё выполняет: после перемотки
+  // он подгружал видео, отстал и вот-вот догонит комнату сам (см. embedTimeReport). Ещё одна перемотка
+  // на то же место только отбросила бы его назад.
+  if (seek && playing && e.want.playing && e.ready && e.resuming && Date.now() - e.checkAt < EMBED_CATCH_WAIT
+      && Math.abs(time - wantTime(e.want)) < 1) return;
+  e.want = { playing, time: seek ? Math.max(0, time) : embedPosition(e), at: Date.now() };
+  e.caughtUp = false;
+  if (playing) e.ended = false;
+  clearTimeout(e.pauseTimer);
+  applyWant(e, seek);
+}
+
+function applyWant(e, seek) {
+  if (!e.ready) return;                 // плеер ещё загружается: команда будет выполнена в embedReady
+  const want = e.want;
+  const t = wantTime(want);
+  const finished = e.duration > 0 && t >= e.duration - 0.5;
+  // Если плеер и так на нужном месте, перемотка не нужна: она только заставила бы его заново загружать
+  // видео. На паузе место выставляем точнее — зрители должны видеть один и тот же кадр.
+  const near = want.playing ? 0.5 : 0.15;
+  if (seek && !finished && Math.abs(embedOwnTime(e) - t) > near) embedSeekTo(e, t, 2);
+  if (!want.playing) {
+    embedLog('→ пауза');
+    embedExpect(e, false);
+    e.send.pause();
+    return;
+  }
+  if (finished) return;                 // видео уже закончилось — заново его не запускаем
+  if (!e.playing) {
+    e.started = false;
+    e.resuming = true;
+    clearTimeout(e.startTimer);
+    e.startTimer = setTimeout(() => embedStartHint(e), EMBED_START_WAIT);
+  }
+  embedLog('→ воспроизведение');
+  embedExpect(e, true);
+  e.send.play();
+}
+
+// t — куда перемотать; checks — сколько раз можно повторить команду, если плеер её не выполнит;
+// assumed — где считать плеер до его первого сообщения (обычно там же, куда перематываем)
+function embedSeekTo(e, t, checks, assumed) {
+  const now = Date.now();
+  embedLog('→ перемотка', t.toFixed(1));
+  e.send.seek(t);
+  e.time = typeof assumed === 'number' ? assumed : t;
+  e.at = now;
+  e.last = null;
+  e.settleUntil = now + EMBED_SETTLE;
+  e.ownSeek = { time: t, at: now, until: now + 30000 };
+  e.check = checks;
+  e.checkTime = t;
+  e.checkAt = now;
+  e.resuming = true;
+}
+
+// Сайт отправил плееру «играть» или «пауза» и ждёт события-отклика. Если плеер, насколько известно сайту,
+// уже в этом состоянии, события не будет — тогда и ждать нечего.
+function embedExpect(e, playing) {
+  const now = Date.now();
+  e.expect = e.expect.filter((x) => x.until > now);
+  const current = e.expect.length ? e.expect[e.expect.length - 1].playing : e.playing;
+  if (current !== playing) e.expect.push({ playing, until: now + EMBED_ECHO });
+}
+// Событие плеера — отклик на команду сайта?
+function embedEcho(e, playing) {
+  const now = Date.now();
+  e.expect = e.expect.filter((x) => x.until > now);
+  const i = e.expect.findIndex((x) => x.playing === playing);
+  if (i < 0) return false;
+  e.expect.splice(0, i + 1);
+  return true;
+}
+
+// Браузер может не дать плееру запуститься без нажатия зрителя (так бывает на телефонах и в Safari)
+function embedStartHint(e) {
+  if (embed !== e || !e.want.playing || e.playing || e.started || e.failed || e.hinted || e.ended || embedAdNow(e)) return;
+  // плеер занят перемоткой или подгрузкой — значит, работает; проверим ещё раз позже
+  if (Date.now() < e.settleUntil + 2000) { e.startTimer = setTimeout(() => embedStartHint(e), 4000); return; }
+  e.hinted = true;
+  toast('Если видео не началось, нажмите на кнопку воспроизведения в самом плеере');
+}
+
+// ----- События плеера -----
+function embedReady(e) {
+  if (e.ready) return;
+  e.ready = true;
+  clearTimeout(e.readyTimer);
+  if (e.troubled) { e.troubled = false; setLinkMode(false); }
+  embedLog('плеер готов');
+  // команда комнаты могла прийти раньше, чем загрузился плеер
+  if (e.want.playing || e.want.time > 0.5) applyWant(e, true);
+}
+
+// Плеер сообщил, что видео пошло (playing = true) или остановилось
+function embedState(e, playing) {
+  const now = Date.now();
+  const was = e.playing;
+  if (playing !== was) {
+    if (!embedAdNow(e)) { e.time = embedOwnTime(e); e.at = now; }
+    e.playing = playing;
+  }
+  if (playing) {
+    e.started = true;
+    e.everPlayed = true;
+    clearTimeout(e.startTimer);
+    clearTimeout(e.pauseTimer);
+  }
+  if (embedAdNow(e)) return;
+  const echo = embedEcho(e, playing);
+  if (playing === e.want.playing) {
+    // Видео пошло без команды сайта, хотя комната давно идёт: зритель сам нажал на плеер, который
+    // не смог запуститься. Догоняем комнату.
+    if (!echo && playing && !was && now - e.caughtAt > 10000 && Math.abs(embedOwnTime(e) - wantTime(e.want)) > 3) {
+      e.caughtAt = now;
+      applyWant(e, true);
+    }
+    return;
+  }
+  // отклик на команду, которую сайт уже успел сменить следующей
+  if (echo) return;
+  if (playing) { embedUserState(e, true); return; }
+  // плеер так и не начал воспроизведение после команды сайта — это не пауза зрителя
+  if (!e.started) return;
+  // Пауза в самом плеере. Сообщаем о ней не сразу: при перемотке и подгрузке плеер может ненадолго
+  // остановиться и пойти дальше сам.
+  clearTimeout(e.pauseTimer);
+  e.pauseTimer = setTimeout(() => {
+    if (embed === e && !e.playing && e.want.playing && !embedAdNow(e)) embedUserState(e, false);
+  }, Math.max(350, e.settleUntil - now + 100));
+}
+
+// Зритель нажал воспроизведение или паузу в самом плеере — сообщаем комнате
+function embedUserState(e, playing) {
+  const now = Date.now();
+  const t = embedOwnTime(e);
+  e.want = { playing, time: t, at: now };
+  if (playing) { e.mine = { want: e.want, at: now }; e.ended = false; }
+  isPlaying = playing;
+  updatePlayBtn();
+  if (!justWoke()) socket.emit(playing ? 'play' : 'pause', { time: t });
+}
+
+// Плеер сообщил текущее время видео
+function embedTimeReport(e, r, duration) {
+  if (duration > 0 && Number.isFinite(duration)) e.duration = duration;
+  if (!Number.isFinite(r) || r < 0) return;
+  if (e.ad && !embedAdNow(e)) e.ad = false;
+  if (e.ad) return;                     // во время рекламы плеер может сообщать её время, а не время видео
+  const now = Date.now();
+  if (r % 1 !== 0) e.exact = true;
+  const slack = e.exact ? 0 : 1;        // плеер, который сообщает целые секунды, может отставать от себя почти на секунду
+  const settling = now < e.settleUntil;
+  const prev = e.last;
+  e.last = { r, at: now };
+
+  // Перемотка: позиция изменилась не так, как шло время. Остановка на подгрузку перемоткой не считается:
+  // при ней позиция не уходит назад и не обгоняет часы. Чья это перемотка — зрителя в самом плеере или
+  // отклик на команду сайта, — разбирает embedUserSeek.
+  if (prev) {
+    const moved = r - prev.r;
+    const passed = (now - prev.at) / 1000;
+    const hinted = e.sought && now - e.sought < 2000;
+    const jumped = e.playing
+      ? moved < -(1.5 + slack) || moved > passed * 1.25 + 1.5 + slack || (hinted && Math.abs(moved - passed) > 1 + slack)
+      : Math.abs(moved) > 0.5 + slack;
+    if (jumped) {
+      e.sought = 0;
+      e.time = r;
+      e.at = now;
+      embedUserSeek(e, r);
+      return;
+    }
+  }
+  // сообщение, отправленное плеером ещё до перемотки, которую только что запросил сайт
+  if (settling && e.ownSeek && now - e.ownSeek.at < EMBED_SETTLE && Math.abs(r - e.ownSeek.time) > 3 + slack) return;
+  embedAtOwnSeek(e, r, now);
+
+  // Часы. Целые секунды значат «где-то между r и r+1»: поправляем часы, только если они вышли за эти границы
+  const own = embedOwnTime(e);
+  if (e.exact) { e.time = r; e.at = now; }
+  else if (own < r) { e.time = r; e.at = now; }
+  else if (own >= r + 1) { e.time = own - r > 2 ? r : r + 0.99; e.at = now; }
+
+  // После перемотки по команде сайта проверяем, что плеер перешёл на нужное место. Некоторые плееры
+  // не перематывают видео, которое ещё не начинало идти, — тогда повторяем команду.
+  if (!settling && e.check > 0) {
+    const since = (now - e.checkAt) / 1000;
+    if (r > e.checkTime - 1.5 - slack && r < e.checkTime + since + 1.5 + slack) e.check = 0;
+    else { embedSeekTo(e, wantTime(e.want), e.check - 1); return; }
+  }
+  // Видео после запуска или перемотки снова пошло. Пока плеер подгружал видео, комната шла дальше.
+  // Если он отстал больше чем на секунду, перематываем ещё раз — с запасом на такую же задержку,
+  // чтобы после неё плеер оказался на общем месте. Делаем это один раз на команду.
+  if (e.resuming && !settling && e.check === 0 && prev && r > prev.r) {
+    e.resuming = false;
+    const room = wantTime(e.want);
+    const lag = room - embedOwnTime(e);
+    if (e.want.playing && !e.caughtUp && lag > 1 + slack && lag < 15 && !(e.duration > 0 && room + lag > e.duration - 1)) {
+      e.caughtUp = true;
+      embedSeekTo(e, room + lag, 0, room);
+    }
+  }
+}
+
+// Плеер прямо сообщил о перемотке (VK Видео)
+function embedSought(e, t) {
+  const now = Date.now();
+  if (!Number.isFinite(t) || t < 0 || embedAdNow(e)) return;
+  e.time = t;
+  e.at = now;
+  e.last = { r: t, at: now };
+  embedUserSeek(e, t);
+}
+
+// Плеер оказался там, куда его отправила последняя перемотка сайта? Тогда это отклик на неё, а не действие
+// зрителя. Об одной перемотке плеер может сообщить несколько раз, поэтому после первого отклика принимаем
+// их ещё полторы секунды; следующая перемотка в то же место — уже действие зрителя.
+function embedAtOwnSeek(e, t, now) {
+  const seek = e.ownSeek;
+  if (!seek || now > seek.until) return false;
+  const slack = e.exact ? 0 : 1;
+  const ahead = e.want.playing ? (now - seek.at) / 1000 : 0;   // столько видео могло пройти после перемотки
+  if (t < seek.time - 2.5 - slack || t > seek.time + ahead + 2.5 + slack) return false;
+  seek.until = Math.min(seek.until, now + 1500);
+  return true;
+}
+
+// Перемотка в самом плеере — сообщаем комнате
+function embedUserSeek(e, t) {
+  const now = Date.now();
+  const slack = e.exact ? 0 : 1;
+  // отклик на перемотку, которую запросил сам сайт: дальше его не рассылаем
+  if (embedAtOwnSeek(e, t, now)) return;
+  // о той же перемотке зрителя комнате уже сообщили
+  if (e.sent && now - e.sent.at < 1500 && Math.abs(t - e.sent.time) < 1.5 + slack) return;
+  e.sent = { time: t, at: now };
+  e.ownSeek = null;
+  e.want = { playing: e.want.playing, time: t, at: now };
+  e.check = 0;
+  e.settleUntil = now + EMBED_SETTLE;
+  if (!justWoke()) socket.emit('seek', { time: t });
+}
+
+// Реклама. У каждого зрителя она своя, поэтому на время рекламы плеер живёт отдельно от комнаты,
+// а после неё возвращается на общее место.
+function embedAd(e, on) {
+  const now = Date.now();
+  if (on) {
+    if (!embedAdNow(e)) {
+      e.adFrom = e.at ? embedOwnTime(e) : wantTime(e.want);
+      e.adAt = now;
+    }
+    e.ad = true;
+    e.adUntil = now + EMBED_AD_MAX;
+    clearTimeout(e.startTimer);
+    clearTimeout(e.pauseTimer);
+    return;
+  }
+  if (!e.ad) return;
+  e.ad = false;
+  e.time = e.adFrom;
+  e.at = now;
+  e.last = null;
+  // Воспроизведение запустил этот зритель, и сразу началась реклама. Чтобы никто не пропустил начало
+  // видео, комната продолжает с того места, где видео остановилось на время рекламы.
+  if (e.mine && e.mine.want === e.want && e.want.playing && e.adAt - e.mine.at < 5000) {
+    e.want = { playing: true, time: e.adFrom, at: now };
+    if (!justWoke()) socket.emit('play', { time: e.adFrom });
+  }
+  e.mine = null;
+  applyWant(e, true);
+}
+
+// Видео закончилось. sure — плеер сообщил об этом однозначно
+function embedEnded(e, sure) {
+  if (e.ended || !e.everPlayed || (!sure && embedAdNow(e))) return;
+  const now = Date.now();
+  let t = embedOwnTime(e);
+  if (e.duration > 0 && e.duration - t < 3) t = e.duration;
+  e.ended = true;
+  e.ad = false;
+  e.time = t;
+  e.at = now;
+  e.playing = false;
+  e.want = { playing: false, time: t, at: now };
+  clearTimeout(e.startTimer);
+  clearTimeout(e.pauseTimer);
+  isPlaying = false;
+  updatePlayBtn();
+  // как и у видеофайла: комната останавливается на конце видео, затем включается следующее из очереди
+  if (!justWoke()) socket.emit('pause', { time: t });
+  socket.emit('queue_next');
+}
+
+// Плеер не смог показать видео. Причину он пишет сам, в своём окне
+function embedError(e, data) {
+  embedLog('ошибка плеера', data);
+  e.failed = true;
+  clearTimeout(e.startTimer);
+}
+
+// Воспроизведение запустил сам зритель кнопкой сайта (см. embedAd)
+function embedMarkMine() {
+  if (embed && embed.want.playing) embed.mine = { want: embed.want, at: Date.now() };
+}
+
+// ----- Rutube: команды и события передаются сообщениями postMessage -----
+// Описание: https://rutube.ru/info/embed/
+// Видео прерывают рекламные ролики перед ним, в середине и после (preroll, midroll, postroll).
+// Баннеры, оверлеи и реклама на паузе идут поверх плеера и воспроизведению не мешают.
+function rutubeAdBreaks(kind) {
+  return !/banner|overlay|pause/i.test(String(kind || ''));
+}
+function connectRutube(e) {
+  const origin = 'https://rutube.ru';
+  const post = (type, data) => {
+    try { e.frame.contentWindow.postMessage(JSON.stringify({ type, data: data || {} }), origin); } catch (err) { /* окно плеера уже закрыто */ }
+  };
+  e.send = {
+    play: () => post('player:play'),
+    pause: () => post('player:pause'),
+    seek: (time) => post('player:setCurrentTime', { time }),
+    volume: (volume) => post('player:setVolume', { volume })
+  };
+  const onMessage = (event) => {
+    if (embed !== e || event.source !== e.frame.contentWindow || event.origin !== origin) return;
+    let msg = event.data;
+    if (typeof msg === 'string') {
+      // среди сообщений плеера есть описание видео на сотни килобайт — такие не разбираем
+      if (msg.length > 20000) return;
+      try { msg = JSON.parse(msg); } catch (err) { return; }
+    }
+    if (!msg || typeof msg.type !== 'string') return;
+    const data = msg.data && typeof msg.data === 'object' ? msg.data : {};
+    if (msg.type !== 'player:currentTime') embedLog('Rutube:', msg.type, data);
+    switch (msg.type) {
+      case 'player:ready':
+        embedReady(e);
+        break;
+      case 'player:durationChange':
+        if (Number(data.duration) > 0) e.duration = Number(data.duration);
+        break;
+      case 'player:currentTime':
+        embedTimeReport(e, Number(data.time), Number(data.duration));
+        break;
+      case 'player:changeState':
+        // названия состояний в разных версиях плеера отличаются: paused / pause, stopped / completed
+        if (data.state === 'playing') embedState(e, true);
+        else if (data.state === 'paused' || data.state === 'pause') embedState(e, false);
+        else if (data.state === 'stopped' || data.state === 'completed') embedEnded(e, false);
+        else if (data.state === 'seeking' || data.state === 'seeked') e.sought = Date.now();
+        // пока плеер перематывает или подгружает видео, его остановка — не действие зрителя
+        if (data.state === 'seeking' || data.state === 'buffering') e.settleUntil = Math.max(e.settleUntil, Date.now() + EMBED_SETTLE);
+        break;
+      case 'player:playComplete':
+        embedEnded(e, true);
+        break;
+      case 'player:rollState':
+        // state: play — реклама началась, complete — закончилась (или её не было)
+        if (!rutubeAdBreaks(data.type || data.rollState)) break;
+        if (data.state === 'play') embedAd(e, true);
+        else if (data.state === 'complete') embedAd(e, false);
+        break;
+      case 'player:adStart':
+        if (rutubeAdBreaks(data.aformat)) embedAd(e, true);
+        break;
+      case 'player:adEnd':
+        if (rutubeAdBreaks(data.aformat)) embedAd(e, false);
+        break;
+      case 'player:error':
+        if (data.fatal !== false) embedError(e, data);
+        break;
+    }
+  };
+  window.addEventListener('message', onMessage);
+  e.off = () => window.removeEventListener('message', onMessage);
+}
+
+// ----- VK Видео: управление через библиотеку videoplayer.js -----
+// Описание: https://dev.vk.com/ru/widgets/video
+const VK_SDK_PATH = '/js/api/videoplayer.js';
+const VK_ASK_MAX = 30;       // столько раз, раз в секунду, спрашиваем плеер, готов ли он
+const VK_ALT_WAIT = 9000;    // плеер не ответил за это время — открываем его на запасном адресе
+let vkSdkLoading = null;
+function loadVkSdk(hosts) {
+  if (window.VK && window.VK.VideoPlayer) return Promise.resolve();
+  if (!vkSdkLoading) {
+    vkSdkLoading = new Promise((resolve, reject) => {
+      const attempt = (i) => {
+        const tag = document.createElement('script');
+        tag.src = `https://${hosts[i]}${VK_SDK_PATH}`;
+        const next = () => {
+          if (i + 1 < hosts.length) attempt(i + 1);
+          else { vkSdkLoading = null; reject(new Error('vk')); }
+        };
+        tag.onload = () => { if (window.VK && window.VK.VideoPlayer) resolve(); else next(); };
+        tag.onerror = next;
+        document.head.appendChild(tag);
+      };
+      attempt(0);
+    });
+  }
+  return vkSdkLoading;
+}
+
+function connectVk(e) {
+  let player = null;
+  let askTimer = null;
+  let altTimer = null;
+  const attach = () => {
+    player = window.VK.VideoPlayer(e.frame);
+    const on = (name, handler) => player.on(name, (state) => {
+      if (embed !== e) return;
+      if (name !== 'timeupdate') embedLog('VK Видео:', name, state);
+      handler(state || {});
+    });
+    on('inited', (state) => { if (Number(state.duration) > 0) e.duration = Number(state.duration); embedReady(e); });
+    on('started', () => embedState(e, true));
+    on('resumed', () => embedState(e, true));
+    on('paused', () => embedState(e, false));
+    on('ended', () => embedEnded(e, true));
+    on('timeupdate', (state) => embedTimeReport(e, Number(state.time), Number(state.duration)));
+    on('seeked', (state) => embedSought(e, Number(state.time)));
+    on('adStarted', () => embedAd(e, true));
+    on('adCompleted', () => embedAd(e, false));
+    on('error', (state) => embedError(e, state));
+  };
+  loadVkSdk(VK_EMBED_HOSTS).then(() => {
+    if (embed !== e) return;            // пока библиотека загружалась, видео сменили
+    attach();
+    e.send = {
+      play: () => player.play(),
+      pause: () => player.pause(),
+      seek: (time) => player.seek(time),
+      volume: (volume) => player.setVolume(volume)
+    };
+    e.off = () => { clearInterval(askTimer); clearTimeout(altTimer); player.destroy(); };
+    // О готовности плеер сообщает в ответ на запрос «init». Библиотека отправляет его один раз — возможно,
+    // раньше, чем окно плеера загрузилось, — поэтому повторяем запрос, пока плеер не ответит.
+    let asked = 0;
+    const ask = () => {
+      if (embed !== e || e.ready || ++asked > VK_ASK_MAX) { clearInterval(askTimer); return; }
+      try { e.frame.contentWindow.postMessage({ method: 'init' }, '*'); } catch (err) { /* окно плеера уже закрыто */ }
+    };
+    e.frame.addEventListener('load', ask);
+    askTimer = setInterval(ask, 1000);
+    // Плеер на основном адресе так и не ответил (например, сайт недоступен в этой сети) — открываем запасной
+    altTimer = setTimeout(() => {
+      if (embed !== e || e.ready || !e.alt) return;
+      embedLog('VK Видео: плеер не ответил, открываем его на запасном адресе');
+      player.destroy();
+      e.frame.src = e.alt;
+      attach();
+    }, VK_ALT_WAIT);
+  }).catch((err) => {
+    embedLog('VK Видео: плеер не подключён', err && err.message);
+    if (embed === e) embedTrouble(e);
+  });
+}
+
+// ===== Потоки HLS (.m3u8) =====
+// Safari и часть других браузеров воспроизводят такие потоки сами — для них всё остаётся как было.
+// Остальным помогает библиотека hls.js (vendor/hls.min.js); она загружается, только когда понадобилась.
+const HLS_LIB = 'vendor/hls.min.js';
+const HLS_TYPES = ['application/vnd.apple.mpegurl', 'application/x-mpegURL'];
+const HLS_MESSAGES = {
+  lib: 'Не удалось загрузить проигрыватель потоков — файл vendor/hls.min.js. Проверьте, что папка vendor загружена вместе с сайтом.',
+  unsupported: 'Этот браузер не умеет воспроизводить потоки HLS. Попробуйте открыть сайт в другом браузере.',
+  network: 'Поток не загружается. Возможно, ссылка устарела или сервер не разрешает воспроизведение на других сайтах.',
+  media: 'Браузер не может воспроизвести этот поток: формат видео или звука не поддерживается.'
+};
+let hlsLibLoading = null;
+let hlsUrl = null;         // адрес потока, для которого hls.js уже запускали
+
+function isHlsUrl(url) {
+  return /\.m3u8(?:[?#&]|$)/i.test(url || '');
+}
+function browserPlaysHls() {
+  return HLS_TYPES.some((type) => htmlVideo.canPlayType(type));
+}
+function canUseHlsLib() {
+  return typeof window.MediaSource !== 'undefined' || typeof window.ManagedMediaSource !== 'undefined';
+}
+
+function loadHlsLib() {
+  if (window.Hls) return Promise.resolve(window.Hls);
+  if (!hlsLibLoading) {
+    hlsLibLoading = new Promise((resolve, reject) => {
+      const fail = () => { hlsLibLoading = null; reject(new Error('hls')); };
+      const tag = document.createElement('script');
+      tag.src = HLS_LIB;
+      tag.onload = () => { if (window.Hls) resolve(window.Hls); else fail(); };
+      tag.onerror = fail;
+      document.head.appendChild(tag);
+    });
+  }
+  return hlsLibLoading;
+}
+
+function destroyHls() {
+  hlsUrl = null;
+  if (!hls) return;
+  try { hls.destroy(); } catch (e) { /* уже остановлен */ }
+  hls = null;
+}
+
+// resume — hls.js подхватывает поток, который до этого пытался воспроизвести сам браузер. Комната за это
+// время могла уйти вперёд, поэтому после загрузки возвращаем плеер к её состоянию.
+function startHls(video, resume) {
+  hlsUrl = video.url;
+  loadHlsLib().then((Hls) => {
+    if (currentVideo !== video) return; // пока библиотека загружалась, видео сменили
+    if (!Hls.isSupported()) { showFallback(video, HLS_MESSAGES.unsupported); return; }
+    const player = new Hls({ liveDurationInfinity: true });
+    let recoveries = 0;
+    hls = player;
+    if (resume) {
+      player.once(Hls.Events.LEVEL_LOADED, () => {
+        if (hls !== player || currentVideo !== video) return;
+        if (isPlaying) doPlay();
+        if (roomId) socket.emit('sync_request');
+      });
+    }
+    player.on(Hls.Events.ERROR, (event, data) => {
+      if (hls !== player || !data || !data.fatal) return;
+      // сбой декодирования часто проходит после перезапуска — пробуем дважды
+      if (data.type === Hls.ErrorTypes.MEDIA_ERROR && recoveries < 2) {
+        recoveries++;
+        player.recoverMediaError();
+        return;
+      }
+      hls = null;
+      try { player.destroy(); } catch (e) { /* уже остановлен */ }
+      showFallback(video, data.type === Hls.ErrorTypes.NETWORK_ERROR ? HLS_MESSAGES.network : HLS_MESSAGES.media);
+    });
+    player.loadSource(video.url);
+    player.attachMedia(htmlVideo);
+  }, () => {
+    if (currentVideo === video) showFallback(video, HLS_MESSAGES.lib);
+  });
+}
+
+// Прямой эфир. Шкала времени у каждого зрителя своя, поэтому общего места просмотра у эфира нет:
+// общими остаются запуск и пауза, а запуск возвращает зрителя к тому, что идёт сейчас.
+function isLiveStream() {
+  return !!currentVideo && currentVideo.type === 'direct' && htmlVideo.duration === Infinity;
+}
+function catchUpLive() {
+  if (!hls || typeof hls.liveSyncPosition !== 'number') return;
+  const edge = hls.liveSyncPosition;
+  if (edge - htmlVideo.currentTime > 8) {
+    markOwnSeek(edge);
+    htmlVideo.currentTime = edge;
+  }
+}
+let liveShown = false;
+function updateLiveLabel() {
+  const live = isLiveStream();
+  if (live !== liveShown) {
+    liveShown = live;
+    seekBar.disabled = live;
+    if (live) $('controlsHint').textContent = 'Это прямой эфир: воспроизведение и пауза общие, а перемотки у эфира нет.';
+  }
+  if (live) {
+    seekBar.value = 100;
+    curTimeEl.textContent = 'Прямой эфир';
+    durTimeEl.textContent = '';
+  }
+}
+function liveNote() {
+  if (isLiveStream()) toast('У прямого эфира нет общей перемотки: все смотрят то, что идёт сейчас');
 }
 
 // ===== Загрузка видео =====
@@ -408,6 +1149,11 @@ function loadVideo(video, autoplay) {
   seekBar.value = 0;
   curTimeEl.textContent = durTimeEl.textContent = fmtTime(0);
   clearTimeout(window._directTimer);
+  // плееры прежнего видео, добавленные позже остальных: Rutube / VK Видео и hls.js
+  destroyEmbed();
+  destroyHls();
+  liveShown = false;
+  seekBar.disabled = false;
 
   if (video.type === 'youtube') {
     if (vimeoPlayer) { try { vimeoPlayer.destroy(); } catch(e){} vimeoPlayer = null; }
@@ -443,14 +1189,29 @@ function loadVideo(video, autoplay) {
       ensureVimeoApi();
       showLoadingPlaceholder();
     }
+  } else if (video.type === 'rutube' || video.type === 'vk') {
+    if (ytPlayer) { try { ytPlayer.destroy(); } catch(e){} ytPlayer = null; ytReady = false; }
+    if (vimeoPlayer) { try { vimeoPlayer.destroy(); } catch(e){} vimeoPlayer = null; }
+    pendingVideo = null;
+    // Прежний видеофайл выгружаем без pause(): иначе плеер разослал бы «паузу» с позицией прежнего видео
+    htmlVideo.removeAttribute('src');
+    htmlVideo.load();
+    htmlVideo.classList.add('hidden');
+    ytContainer.classList.remove('hidden');
+    startEmbed(video);
   } else {
     if (ytPlayer) { try { ytPlayer.destroy(); } catch(e){} ytPlayer = null; ytReady = false; }
     if (vimeoPlayer) { try { vimeoPlayer.destroy(); } catch(e){} vimeoPlayer = null; }
     ytContainer.classList.add('hidden');
     htmlVideo.classList.remove('hidden');
     htmlVideo.dataset.url = video.url;
-    htmlVideo.src = video.url;
-    htmlVideo.load();
+    if (!isLink && isHlsUrl(video.url) && !browserPlaysHls()) {
+      // поток HLS, который браузер сам не воспроизводит
+      startHls(video);
+    } else {
+      htmlVideo.src = video.url;
+      htmlVideo.load();
+    }
     if (isLink) {
       // Карточку со ссылкой показываем сразу. Если по адресу окажется видеофайл, браузер его
       // загрузит, и карточку сменит плеер (см. обработчик loadedmetadata).
@@ -620,10 +1381,16 @@ htmlVideo.addEventListener('loadedmetadata', () => {
 htmlVideo.addEventListener('ended', () => { isPlaying = false; updatePlayBtn(); socket.emit('queue_next'); });
 htmlVideo.addEventListener('seeked', () => {
   if (suppressEvents || isOwnSeek(htmlVideo.currentTime) || justWoke()) return;
+  // у прямого эфира общего места просмотра нет: к текущему месту эфира плеер переходит сам
+  if (isLiveStream()) return;
   socket.emit('seek', { time: htmlVideo.currentTime });
 });
 htmlVideo.addEventListener('error', () => {
   if (!currentVideo || currentVideo.type !== 'direct') return;
+  // поток ведёт hls.js: с ошибками он разбирается сам (см. startHls)
+  if (hls) return;
+  // браузер взялся воспроизвести поток HLS сам, но не смог — пробуем через hls.js
+  if (isHlsUrl(currentVideo.url) && hlsUrl !== currentVideo.url && canUseHlsLib()) { startHls(currentVideo, true); return; }
   const code = htmlVideo.error && htmlVideo.error.code;
   const reason = code === 4
     ? 'Браузер не может воспроизвести этот файл: формат не поддерживается или ссылка недоступна. Попробуйте прямую ссылку на MP4 или видео с YouTube.'
@@ -687,6 +1454,11 @@ $('bigPlay').addEventListener('click', () => {
 });
 $('back10').addEventListener('click', () => { const t = Math.max(0, getTime() - 10); doSeek(t); socket.emit('seek', { time: t }); });
 $('fwd10').addEventListener('click', () => { const t = getTime() + 10; doSeek(t); socket.emit('seek', { time: t }); });
+// Дополнения к этим кнопкам для плееров Rutube / VK Видео и для прямых эфиров
+$('playPauseBtn').addEventListener('click', embedMarkMine);
+$('bigPlay').addEventListener('click', embedMarkMine);
+$('back10').addEventListener('click', liveNote);
+$('fwd10').addEventListener('click', liveNote);
 $('fsBtn').addEventListener('click', async () => {
   const el = $('playerWrap');
   const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
@@ -712,6 +1484,7 @@ function applyVolume() {
   try { htmlVideo.volume = v; } catch(e) {}
   if (ytPlayer && ytReady) { try { ytPlayer.setVolume(Number(volBar.value)); } catch(e) {} }
   if (vimeoPlayer) { try { vimeoPlayer.setVolume(v).catch(()=>{}); } catch(e) {} }
+  if (embed && embed.ready) { try { embed.send.volume(v); } catch(e) {} }
 }
 volBar.addEventListener('input', applyVolume);
 let seeking = false;
@@ -736,6 +1509,7 @@ setInterval(() => {
   } else {
     curTimeEl.textContent = fmtTime(t);
   }
+  updateLiveLabel();
 }, 250);
 
 setInterval(() => { if (roomId) socket.emit('sync_request'); }, 15000);
@@ -948,7 +1722,9 @@ function syncToState(state, attempt) {
   const ready = state.video && (
     (currentVideo.type === 'direct' && htmlVideo.readyState > 0) ||
     (currentVideo.type === 'youtube' && ytReady) ||
-    (currentVideo.type === 'vimeo' && vimeoPlayer)
+    (currentVideo.type === 'vimeo' && vimeoPlayer) ||
+    // плеер Rutube или VK Видео запоминает команду сам и выполняет её, когда загрузится
+    (!!embed && embed.type === currentVideo.type)
   );
   if (!ready && attempt < 20) {
     setTimeout(() => syncToState(state, attempt + 1), 500);
