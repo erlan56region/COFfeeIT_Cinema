@@ -2,34 +2,29 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>hold test 2</title>
+<title>hold test 3</title>
+<link rel="stylesheet" href="https://httpbin.org/delay/9?css=1">
+<link rel="stylesheet" href="https://postman-echo.com/delay/9?css=1">
 </head>
 <body>
-<h1>Hold test 2</h1>
+<h1>Hold test 3</h1>
 <p id="clock">clock: not started</p>
 <p id="events">events:</p>
-<iframe id="f1" title="hold-httpbin" src="https://httpbin.org/delay/9?frame=1" width="10" height="10"></iframe>
-<iframe id="f2" title="hold-postman" src="https://postman-echo.com/delay/9?frame=1" width="10" height="10"></iframe>
 <script>
 (function () {
   var t0 = performance.now();
-  var d0 = Date.now();
   var clock = document.getElementById('clock');
   var events = document.getElementById('events');
   function ms() { return Math.round(performance.now() - t0); }
   function note(text) { events.textContent += ' [' + ms() + ' ms: ' + text + ']'; }
-  setInterval(function () { clock.textContent = 'clock: ' + ms() + ' ms (performance), ' + (Date.now() - d0) + ' ms (Date); readyState=' + document.readyState; }, 100);
+  setInterval(function () { clock.textContent = 'clock: ' + ms() + ' ms; readyState=' + document.readyState; }, 100);
   note('script started, readyState=' + document.readyState);
   window.addEventListener('load', function () { note('window load'); });
-  ['f1', 'f2'].forEach(function (id) {
-    var el = document.getElementById(id);
-    if (!el) { note(id + ' missing'); return; }
-    el.addEventListener('load', function () { note(id + ' load'); });
-    el.addEventListener('error', function () { note(id + ' error'); });
+  var urls = ['https://httpbin.org/delay/8?n=1', 'https://httpbin.org/delay/8?n=2', 'https://httpbin.org/delay/8?n=3', 'https://postman-echo.com/delay/8?n=1', 'https://postman-echo.com/delay/8?n=2', 'https://postman-echo.com/delay/8?n=3'];
+  urls.forEach(function (u, i) {
+    var started = performance.now();
+    fetch(u).then(function (r) { note('fetch ' + i + ' status ' + r.status + ' after ' + Math.round(performance.now() - started)); }).catch(function (e) { note('fetch ' + i + ' failed after ' + Math.round(performance.now() - started) + ': ' + e.message); });
   });
-  var started = performance.now();
-  fetch('https://httpbin.org/delay/3?x=1').then(function (r) { note('fetch httpbin/3 status ' + r.status + ' after ' + Math.round(performance.now() - started)); }).catch(function (e) { note('fetch httpbin/3 failed: ' + e.message); });
-  fetch('https://postman-echo.com/delay/3?x=1').then(function (r) { note('fetch postman/3 status ' + r.status + ' after ' + Math.round(performance.now() - started)); }).catch(function (e) { note('fetch postman/3 failed: ' + e.message); });
 })();
 </script>
 </body>
